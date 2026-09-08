@@ -2,6 +2,7 @@ package com.nshd.nurm3.data
 
 import com.nshd.nurm3.ui.DailyProgress
 import com.nshd.nurm3.ui.ProgressSummary
+import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 
@@ -22,27 +23,25 @@ object NurInsights {
             .mapNotNull { runCatching { LocalDate.parse(it.localDate) }.getOrNull() }
             .filter { !it.isAfter(today) }.toSet()
         val first = entry.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-            ?: today
+            ?: Instant.ofEpochMilli(entry.createdAt).atZone(zone).toLocalDate()
         val start = first.coerceAtMost(today)
         var longest = 0
         var run = 0
         var current = 0
-        var date = start
-        while (!date.isAfter(today)) {
+        var streakOpen = true
+        var date = today
+        var scanned = 0
+        // No more than ten years of historical days are traversed per calculation.
+        while (!date.isBefore(start) && scanned++ <= 3660) {
             if (EntrySchedule.isActive(entry, date, zone)) {
                 if (date in dates) {
                     run++
+                    if (streakOpen) current++
                     longest = maxOf(longest, run)
-                } else run = 0
-            }
-            date = date.plusDays(1)
-        }
-        date = today
-        while (!date.isBefore(start)) {
-            if (EntrySchedule.isActive(entry, date, zone)) {
-                if (date in dates) current++
-                else if (date == today) { /* An unfinished current day does not break yesterday's streak. */ }
-                else break
+                } else {
+                    run = 0
+                    if (date != today) streakOpen = false
+                }
             }
             date = date.minusDays(1)
         }
