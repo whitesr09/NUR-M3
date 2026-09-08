@@ -21,27 +21,31 @@ object NurInsights {
     fun habit(entry: Entry, completions: List<Completion>, today: LocalDate, zone: ZoneId = ZoneId.systemDefault()): HabitInsight {
         val dates = completions.asSequence().filter { it.entryId == entry.id }
             .mapNotNull { runCatching { LocalDate.parse(it.localDate) }.getOrNull() }
-            .filter { !it.isAfter(today) }.toSet()
+            .filter { !it.isAfter(today) && EntrySchedule.isActive(entry, it, zone) }.toSet()
         val first = entry.startDate?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
             ?: Instant.ofEpochMilli(entry.createdAt).atZone(zone).toLocalDate()
         val start = first.coerceAtMost(today)
         var longest = 0
         var run = 0
-        var current = 0
-        var streakOpen = true
-        var date = today
+        var date = start
         var scanned = 0
-        // No more than ten years of historical days are traversed per calculation.
+        while (!date.isAfter(today) && scanned++ <= 3660) {
+            if (EntrySchedule.isActive(entry, date, zone)) {
+                run = if (date in dates) run + 1 else 0
+                longest = maxOf(longest, run)
+            }
+            date = date.plusDays(1)
+        }
+        var current = 0
+        date = today
+        var firstScheduled = true
+        scanned = 0
         while (!date.isBefore(start) && scanned++ <= 3660) {
             if (EntrySchedule.isActive(entry, date, zone)) {
-                if (date in dates) {
-                    run++
-                    if (streakOpen) current++
-                    longest = maxOf(longest, run)
-                } else {
-                    run = 0
-                    if (date != today) streakOpen = false
-                }
+                if (date in dates) current++
+                else if (firstScheduled && date == today) { /* Today is not finished yet. */ }
+                else break
+                firstScheduled = false
             }
             date = date.minusDays(1)
         }
