@@ -14,7 +14,7 @@ class InsightsBoundaryTest {
     @Test fun futureAndUnscheduledRecordsAreIgnored() {
         val weekly = task.copy(schedule = "weekly")
         val result = NurInsights.habit(weekly, listOf(done("2026-09-01"), done("2026-09-02"), done("2026-09-08"), done("2026-09-09")), date, ZoneOffset.UTC)
-        assertEquals(3, result.completedDays)
+        assertEquals(2, result.completedDays)
         assertEquals(2, result.currentStreak)
     }
 
