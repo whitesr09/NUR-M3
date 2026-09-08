@@ -37,18 +37,30 @@ interface NurDao {
     fun observeAllEntries(): Flow<List<Entry>>
     @Query("SELECT * FROM completions ORDER BY localDate DESC, completedAt DESC")
     fun observeCompletions(): Flow<List<Completion>>
+    @Query("SELECT * FROM entries ORDER BY position, createdAt")
+    suspend fun getAllEntries(): List<Entry>
+    @Query("SELECT * FROM completions ORDER BY localDate DESC, completedAt DESC")
+    suspend fun getAllCompletions(): List<Completion>
     @Query("SELECT * FROM entries WHERE id = :id LIMIT 1")
     suspend fun getEntry(id: String): Entry?
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveEntry(entry: Entry)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertEntryIgnoringConflict(entry: Entry): Long
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveCompletion(completion: Completion)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCompletionIgnoringConflict(completion: Completion): Long
     @Query("DELETE FROM completions WHERE entryId = :id AND localDate = :date")
     suspend fun removeCompletion(id: String, date: String)
     @Query("UPDATE entries SET archived = 1 WHERE id = :id AND kind != 'prayer'")
     suspend fun archiveEntry(id: String)
     @Query("DELETE FROM completions WHERE entryId = :id")
     suspend fun deleteCompletions(id: String)
+    @Query("DELETE FROM completions")
+    suspend fun clearCompletionsForRestore()
+    @Query("DELETE FROM entries WHERE kind != 'prayer'")
+    suspend fun clearNonPrayerEntriesForRestore()
     @Query("SELECT COUNT(*) FROM entries WHERE kind = 'prayer'")
     suspend fun prayerCount(): Int
 

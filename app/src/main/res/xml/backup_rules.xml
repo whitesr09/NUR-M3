@@ -3,4 +3,5 @@
     <include domain="database" path="."/>
     <include domain="sharedpref" path="."/>
     <exclude domain="sharedpref" path="nur_secrets.preferences_pb"/>
+    <exclude domain="sharedpref" path="nur_private.xml"/>
 </full-backup-content>
