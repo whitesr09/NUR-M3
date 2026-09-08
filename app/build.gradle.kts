@@ -8,15 +8,47 @@ plugins {
 android {
     namespace = "com.nshd.nurm3"
     compileSdk = 35
+
     defaultConfig {
         applicationId = "com.nshd.nurm3"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildTypes { release { isMinifyEnabled = false } }
+
+    signingConfigs {
+        create("nurStableDebug") {
+            storeFile = file("keystores/nur-m3-test.jks")
+            storePassword = "nur-m3-test-pass"
+            keyAlias = "nur-m3-test"
+            keyPassword = "nur-m3-test-pass"
+        }
+        val releaseStore = providers.environmentVariable("NUR_RELEASE_STORE_FILE").orNull
+        val releaseStorePassword = providers.environmentVariable("NUR_RELEASE_STORE_PASSWORD").orNull
+        val releaseKeyAlias = providers.environmentVariable("NUR_RELEASE_KEY_ALIAS").orNull
+        val releaseKeyPassword = providers.environmentVariable("NUR_RELEASE_KEY_PASSWORD").orNull
+        if (!releaseStore.isNullOrBlank() && !releaseStorePassword.isNullOrBlank() && !releaseKeyAlias.isNullOrBlank() && !releaseKeyPassword.isNullOrBlank()) {
+            create("nurRelease") {
+                storeFile = file(releaseStore)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("nurStableDebug")
+        }
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("nurRelease") ?: signingConfigs.getByName("nurStableDebug")
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

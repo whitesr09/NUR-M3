@@ -1,7 +1,6 @@
 package com.nshd.nurm3.ui
 
 import android.os.Build
-import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,7 +15,7 @@ import com.nshd.nurm3.NurViewModel
 import com.nshd.nurm3.data.NurPreferences
 
 @Composable
-fun SettingsScreen(prefs: NurPreferences, navigate: (String) -> Unit) {
+fun SettingsScreen(prefs: NurPreferences, model: NurViewModel, navigate: (String) -> Unit) {
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Make NUR yours", style = MaterialTheme.typography.headlineMedium)
@@ -25,11 +24,21 @@ fun SettingsScreen(prefs: NurPreferences, navigate: (String) -> Unit) {
         item { StudioLink(Icons.Default.Palette, "Appearance Studio", "Themes, colors, typography and motion") { navigate("appearance") } }
         item { StudioLink(Icons.Default.ViewAgenda, "Daily Journey", "Choose, arrange and hide dashboard cards") { navigate("layout") } }
         item {
+            Text("Privacy & reliability", style = MaterialTheme.typography.titleLarge)
+            Text("These controls prepare the stable version for lock, backup, widgets and companion modules.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        item { SettingToggle("Private preview", "Hide sensitive task/reflection previews outside the app", prefs.privatePreview) { model.setting("private_preview", it) } }
+        item { SettingToggle("App lock ready", "Reserve the privacy flow for PIN/biometric lock", prefs.appLock) { model.setting("app_lock", it) } }
+        item { SettingToggle("Backup reminders", "Remind users to export data before major updates", prefs.backupReminders) { model.setting("backup_reminders", it) } }
+        item { SettingToggle("Widgets", "Enable home-screen widget support", prefs.widgetsEnabled) { model.setting("widgets", it) } }
+        item { SettingToggle("Companion modules", "Show optional Islamic companion tools in future releases", prefs.companionModules) { model.setting("companion_modules", it) } }
+        item { SettingToggle("NUR AI", "Enable the future Gemini BYOK assistant module", prefs.nurAiEnabled) { model.setting("nur_ai", it) } }
+        item {
             HorizontalDivider()
             Text("NUR AI", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
-            Text("Optional Gemini integration is planned for a later milestone. The offline app does not need an API key.", style = MaterialTheme.typography.bodyMedium)
+            Text("Optional Gemini integration will use a Bring Your Own Key setup. No shared API key is shipped in the APK.", style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(12.dp))
-            Text("NUR Material 3 • 0.2.0", style = MaterialTheme.typography.labelMedium)
+            Text("NUR Material 3 • 0.3.0", style = MaterialTheme.typography.labelMedium)
             Text("Made by NSHD", style = MaterialTheme.typography.labelSmall)
         }
     }

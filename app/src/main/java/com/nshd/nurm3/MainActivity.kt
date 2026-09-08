@@ -11,7 +11,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.*
 import com.nshd.nurm3.data.*
@@ -50,9 +49,7 @@ fun NurApp(model: NurViewModel) {
     val today by model.today.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val current = nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey"
-    LaunchedEffect(Unit) {
-        while (true) { model.refreshDate(); delay(30_000) }
-    }
+    LaunchedEffect(Unit) { while (true) { model.refreshDate(); delay(30_000) } }
     NurTheme(prefs) {
         val navigate: (String) -> Unit = { route ->
             if (route != current) {
@@ -83,14 +80,7 @@ fun NurApp(model: NurViewModel) {
             },
             bottomBar = {
                 if (current in tabs.map { it.route }) NavigationBar {
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = current == tab.route,
-                            onClick = { navigate(tab.route) },
-                            icon = { Icon(tab.icon, contentDescription = null) },
-                            label = { Text(tab.label) }, alwaysShowLabel = false
-                        )
-                    }
+                    tabs.forEach { tab -> NavigationBarItem(selected = current == tab.route, onClick = { navigate(tab.route) }, icon = { Icon(tab.icon, contentDescription = null) }, label = { Text(tab.label) }, alwaysShowLabel = false) }
                 }
             }
         ) { padding ->
@@ -100,7 +90,7 @@ fun NurApp(model: NurViewModel) {
                 composable("muhasaba") { EntryScreen("Muhasaba", "Reflect on your day", NurKind.MUHASABA, entries, completions, today, model) }
                 composable("rhythm") { EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model) }
                 composable("history") { HistoryScreen(allEntries, completions) }
-                composable("settings") { SettingsScreen(prefs, navigate) }
+                composable("settings") { SettingsScreen(prefs, model, navigate) }
                 composable("appearance") { AppearanceStudio(prefs, model) }
                 composable("layout") { JourneyStudio(prefs.journey, model) }
             }
