@@ -4,6 +4,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -49,6 +54,7 @@ fun NurApp(model: NurViewModel) {
     val today by model.today.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val current = nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey"
+    val auxiliary = setOf("settings", "appearance", "layout", "insights", "backup")
     LaunchedEffect(Unit) { while (true) { model.refreshDate(); delay(30_000) } }
     NurTheme(prefs) {
         val navigate: (String) -> Unit = { route ->
@@ -60,6 +66,8 @@ fun NurApp(model: NurViewModel) {
                 } else nav.navigate(route) { launchSingleTop = true }
             }
         }
+        val enter = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(220))
+        val exit = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(120))
         Scaffold(
             topBar = {
                 TopAppBar(
@@ -69,13 +77,15 @@ fun NurApp(model: NurViewModel) {
                                 "appearance" -> "Appearance Studio"
                                 "layout" -> "Customize Journey"
                                 "settings" -> "Settings"
+                                "insights" -> "Insights"
+                                "backup" -> "Backup & restore"
                                 else -> tabs.firstOrNull { it.route == current }?.label ?: "NUR"
                             }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                             if (current == "journey") Text(today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")), style = MaterialTheme.typography.labelSmall)
                         }
                     },
-                    navigationIcon = { if (current in listOf("settings", "appearance", "layout")) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") } },
-                    actions = { if (current !in listOf("settings", "appearance", "layout")) IconButton(onClick = { nav.navigate("settings") }) { Icon(Icons.Default.Settings, contentDescription = "Settings") } }
+                    navigationIcon = { if (current in auxiliary) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.Default.ArrowBack, contentDescription = "Back") } },
+                    actions = { if (current !in auxiliary) IconButton(onClick = { navigate("settings") }) { Icon(Icons.Default.Settings, contentDescription = "Settings") } }
                 )
             },
             bottomBar = {
@@ -84,7 +94,7 @@ fun NurApp(model: NurViewModel) {
                 }
             }
         ) { padding ->
-            NavHost(navController = nav, startDestination = "journey", modifier = Modifier.fillMaxSize().padding(padding)) {
+            NavHost(navController = nav, startDestination = "journey", modifier = Modifier.fillMaxSize().padding(padding), enterTransition = { enter }, exitTransition = { exit }, popEnterTransition = { enter }, popExitTransition = { exit }) {
                 composable("journey") { DailyJourneyScreen(entries, completions, today, prefs, model, navigate) }
                 composable("amanah") { EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model) }
                 composable("muhasaba") { EntryScreen("Muhasaba", "Reflect on your day", NurKind.MUHASABA, entries, completions, today, model) }
@@ -93,6 +103,8 @@ fun NurApp(model: NurViewModel) {
                 composable("settings") { SettingsScreen(prefs, model, navigate) }
                 composable("appearance") { AppearanceStudio(prefs, model) }
                 composable("layout") { JourneyStudio(prefs.journey, model) }
+                composable("insights") { InsightsScreen(allEntries, completions, today) }
+                composable("backup") { BackupScreen() }
             }
         }
     }
