@@ -1,6 +1,7 @@
 package com.nshd.nurm3
 
 import android.hardware.biometrics.BiometricPrompt
+import android.hardware.biometrics.BiometricManager
 import android.app.KeyguardManager
 import android.os.Build
 import android.os.Bundle
@@ -51,7 +52,7 @@ class MainActivity : ComponentActivity() {
                 val prompt = BiometricPrompt.Builder(this)
                     .setTitle("Unlock NUR")
                     .setSubtitle("Confirm your identity")
-                    .setAllowedAuthenticators(BiometricPrompt.Authenticators.BIOMETRIC_STRONG or BiometricPrompt.Authenticators.DEVICE_CREDENTIAL)
+                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
                     .build()
                 prompt.authenticate(CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
                     override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
