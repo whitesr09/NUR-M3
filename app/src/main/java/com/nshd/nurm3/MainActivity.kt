@@ -9,6 +9,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -78,7 +79,7 @@ fun NurApp(model: NurViewModel) {
                     Destination.HOME -> HomeScreen(entries, completions, today, prefs, model)
                     Destination.AMANAH -> EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model)
                     Destination.MUHASABA -> EntryScreen("Muhasaba", "Reflect on your day", NurKind.MUHASABA, entries, completions, today, model)
-                    Destination.HISTORY -> HistoryScreen(entries, completions, today)
+                    Destination.HISTORY -> HistoryScreen(entries, completions)
                     Destination.SETTINGS -> SettingsScreen(prefs, model)
                 }
             }
@@ -171,7 +172,7 @@ private fun EntryScreen(title: String, subtitle: String, kind: String, entries: 
 }
 
 @Composable
-private fun HistoryScreen(entries: List<Entry>, completions: List<Completion>, today: LocalDate) {
+private fun HistoryScreen(entries: List<Entry>, completions: List<Completion>) {
     val dates = completions.map { it.localDate }.distinct().sortedDescending()
     androidx.compose.foundation.lazy.LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item { Text("History", style = MaterialTheme.typography.headlineMedium); Text("Your recorded activity, never invented or backfilled.") }
