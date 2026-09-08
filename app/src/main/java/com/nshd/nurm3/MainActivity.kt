@@ -1,8 +1,7 @@
 package com.nshd.nurm3
 
-import android.app.BiometricPrompt
+import android.hardware.biometrics.BiometricPrompt
 import android.app.KeyguardManager
-import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.os.CancellationSignal
@@ -19,6 +18,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
