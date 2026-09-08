@@ -37,12 +37,20 @@ interface NurDao {
     fun observeAllEntries(): Flow<List<Entry>>
     @Query("SELECT * FROM completions ORDER BY localDate DESC, completedAt DESC")
     fun observeCompletions(): Flow<List<Completion>>
+    @Query("SELECT * FROM entries ORDER BY position, createdAt")
+    suspend fun snapshotEntries(): List<Entry>
+    @Query("SELECT * FROM completions ORDER BY localDate, completedAt")
+    suspend fun snapshotCompletions(): List<Completion>
     @Query("SELECT * FROM entries WHERE id = :id LIMIT 1")
     suspend fun getEntry(id: String): Entry?
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveEntry(entry: Entry)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveCompletion(completion: Completion)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertEntriesIfAbsent(entries: List<Entry>): List<Long>
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCompletionsIfAbsent(completions: List<Completion>): List<Long>
     @Query("DELETE FROM completions WHERE entryId = :id AND localDate = :date")
     suspend fun removeCompletion(id: String, date: String)
     @Query("UPDATE entries SET archived = 1 WHERE id = :id AND kind != 'prayer'")
@@ -51,6 +59,10 @@ interface NurDao {
     suspend fun deleteCompletions(id: String)
     @Query("SELECT COUNT(*) FROM entries WHERE kind = 'prayer'")
     suspend fun prayerCount(): Int
+    @Query("DELETE FROM completions")
+    suspend fun clearCompletionsForRestore()
+    @Query("DELETE FROM entries")
+    suspend fun clearEntriesForRestore()
 
     @Transaction
     suspend fun recordCompletion(id: String, date: String, completed: Boolean, timestamp: Long) {
