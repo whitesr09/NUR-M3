@@ -10,8 +10,10 @@ import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class NurViewModel(application: Application) : AndroidViewModel(application) {
-    private val repo = NurRepository(NurDatabase.get(application).dao())
+    private val database = NurDatabase.get(application)
+    private val repo = NurRepository(database.dao())
     private val settings = NurSettings(application)
+    private val backupService = BackupService(application)
     val preferences = settings.preferences.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NurPreferences())
     val entries = repo.entries.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val allEntries = repo.allEntries.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -21,7 +23,7 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
 
     init {
         viewModelScope.launch {
-            val dao = NurDatabase.get(application).dao()
+            val dao = database.dao()
             if (dao.prayerCount() == 0) {
                 listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha").forEachIndexed { index, title ->
                     dao.saveEntry(Entry("prayer-${index + 1}", NurKind.PRAYER, title, index, System.currentTimeMillis()))
@@ -41,4 +43,8 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun typeScale(value: Float) = viewModelScope.launch { settings.updateScale(value) }
     fun journey(layout: JourneyLayout) = viewModelScope.launch { settings.saveJourney(layout) }
     fun resetAppearance() = viewModelScope.launch { settings.resetAppearance() }
+
+    suspend fun exportBackup(): String = backupService.export()
+    fun inspectBackup(raw: String): BackupSummary = BackupCodec.inspect(raw)
+    suspend fun importBackup(raw: String, replace: Boolean): ImportResult = backupService.import(raw, replace)
 }
