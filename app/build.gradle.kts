@@ -12,13 +12,11 @@ android {
         applicationId = "com.nshd.nurm3"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-    buildTypes {
-        release { isMinifyEnabled = false }
-    }
+    buildTypes { release { isMinifyEnabled = false } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -28,7 +26,10 @@ android {
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
-kapt { correctErrorTypes = true }
+kapt {
+    correctErrorTypes = true
+    arguments { arg("room.schemaLocation", "$projectDir/schemas") }
+}
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))
@@ -51,5 +52,7 @@ dependencies {
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.room:room-testing:2.7.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
