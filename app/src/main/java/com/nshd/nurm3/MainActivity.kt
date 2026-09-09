@@ -3,6 +3,7 @@ package com.nshd.nurm3
 import android.hardware.biometrics.BiometricPrompt
 import android.hardware.biometrics.BiometricManager
 import android.app.KeyguardManager
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
@@ -22,6 +23,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -42,6 +44,7 @@ class MainActivity : ComponentActivity() {
     val refreshController by lazy { NurRefreshController(window, this) }
     private val requestedRoute = MutableStateFlow("")
     private var authResult: ((Boolean, String) -> Unit)? = null
+    override fun attachBaseContext(newBase: Context) { super.attachBaseContext(NurAccessibilityStore.localized(newBase)) }
     private val credentialLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = authResult
         authResult = null
@@ -86,7 +89,10 @@ class MainActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         lifecycle.addObserver(refreshController)
         acceptRoute(intent)
-        setContent { NurApp(model, focus, lock, ::authenticateDevice, requestedRoute.value) { requestedRoute.value = "" } }
+        setContent {
+            val route by requestedRoute.collectAsStateWithLifecycle()
+            NurApp(model, focus, lock, ::authenticateDevice, route) { requestedRoute.value = "" }
+        }
     }
     override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptRoute(intent) }
     override fun onResume() { super.onResume(); model.refreshDate(); NurWidgetProvider.refresh(this) }
@@ -96,17 +102,25 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun NurApp(model: NurViewModel, focus: FocusController, lock: NurLock, authenticate: ((Boolean, String) -> Unit) -> Unit, requestedRoute: String = "", consumeRoute: () -> Unit = {}) {
-    val prefs by model.preferences.collectAsStateWithLifecycle()
+    val savedPrefs by model.preferences.collectAsStateWithLifecycle()
     val entries by model.entries.collectAsStateWithLifecycle()
     val allEntries by model.allEntries.collectAsStateWithLifecycle()
     val completions by model.completions.collectAsStateWithLifecycle()
     val today by model.today.collectAsStateWithLifecycle()
     val locked by lock.locked.collectAsStateWithLifecycle()
     val activity = androidx.compose.ui.platform.LocalContext.current as MainActivity
+    val accessStore = remember(activity) { NurAccessibilityStore.get(activity) }
+    val accessibility by accessStore.settings.collectAsStateWithLifecycle()
+    val prefs = savedPrefs.copy(
+        typeScale = (savedPrefs.typeScale * accessibility.textScale).coerceIn(0.85f, 2f),
+        reduceMotion = savedPrefs.reduceMotion || accessibility.reduceMotion || !android.animation.ValueAnimator.areAnimatorsEnabled(),
+        compactCards = savedPrefs.compactCards && accessibility.textScale <= 1.1f
+    )
     val refreshStatus by activity.refreshController.status.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val current = (nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey").substringBefore("?")
     val snackbar = remember { SnackbarHostState() }
+    var showGuide by rememberSaveable { mutableStateOf(!activity.getSharedPreferences("nur_onboarding", Context.MODE_PRIVATE).getBoolean("guide_seen", false)) }
     val dark = when (prefs.themeMode) {
         "light" -> false
         "system" -> isSystemInDarkTheme()
@@ -124,7 +138,7 @@ fun NurApp(model: NurViewModel, focus: FocusController, lock: NurLock, authentic
     LaunchedEffect(Unit) { while (true) { model.refreshDate(); delay(30_000) } }
     LaunchedEffect(model, locked) { if (!locked) model.uiEvents.collectLatest { snackbar.showSnackbar(it) } }
     LaunchedEffect(entries, completions, today, prefs.widgetsEnabled) { NurWidgetProvider.refresh(activity) }
-    NurTheme(prefs) {
+    NurAccessibleTheme(prefs, accessibility) {
         if (locked) LockScreen(lock, authenticate)
         else CompositionLocalProvider(LocalNurSnackbarHost provides snackbar) {
             val navigate: (String) -> Unit = { route ->
@@ -165,10 +179,15 @@ fun NurApp(model: NurViewModel, focus: FocusController, lock: NurLock, authentic
                     composable("dhikr") { DhikrScreen(model, prefs, today) }
                     composable("focus") { FocusScreen(focus) }
                     composable("ai") { NurAiScreen(prefs, model) }
+                    composable("widgets") { NurWidgetSettingsScreen(prefs, model) }
                     composable("accessibility") { NurAccessibilityScreen(prefs, model) }
                     composable("reflections?verse={verse}", arguments = listOf(androidx.navigation.navArgument("verse") { type = androidx.navigation.NavType.StringType; defaultValue = "" })) { entry -> ReflectionScreen(entry.arguments?.getString("verse")) }
                 }
             }
+            if (showGuide && requestedRoute.isBlank()) NurFeatureGuide(onDismiss = {
+                activity.getSharedPreferences("nur_onboarding", Context.MODE_PRIVATE).edit().putBoolean("guide_seen", true).apply()
+                showGuide = false
+            })
         }
     }
 }
