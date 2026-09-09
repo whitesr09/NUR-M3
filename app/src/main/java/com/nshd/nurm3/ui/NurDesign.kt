@@ -45,17 +45,7 @@ object NurDesign {
 
 @Composable
 fun NurPanel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
-    val compact = LocalNurCompact.current
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Column(Modifier.padding(if (compact) 14.dp else 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
-    }
+    NurGlassSurface(modifier, content)
 }
 
 @Composable
