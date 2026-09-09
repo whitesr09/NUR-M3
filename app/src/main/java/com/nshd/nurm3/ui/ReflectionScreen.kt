@@ -10,6 +10,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -24,13 +25,23 @@ import androidx.compose.ui.unit.dp
 import com.nshd.nurm3.data.QuranReflection
 import com.nshd.nurm3.data.ReflectionLibrary
 
-/** Read-only curated content. No generated quotations or remote content are displayed. */
+/** Read-only curated content. A requested verse opens directly without a network request. */
 @Composable
-fun ReflectionScreen() {
+fun ReflectionScreen(initialVerseId: String? = null) {
     var query by rememberSaveable { mutableStateOf("") }
-    var selected by rememberSaveable { mutableStateOf<String?>(null) }
+    var selected by rememberSaveable(initialVerseId) { mutableStateOf(initialVerseId?.takeIf { ReflectionLibrary.find(it) != null }) }
     val results = remember(query) { ReflectionLibrary.search(query) }
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+    val listState = rememberLazyListState()
+    val reduceMotion = LocalNurReduceMotion.current
+    LaunchedEffect(initialVerseId) {
+        val index = ReflectionLibrary.items.indexOfFirst { it.id == initialVerseId }
+        if (index >= 0) {
+            query = ""
+            selected = initialVerseId
+            if (reduceMotion) listState.scrollToItem(index + 1) else listState.animateScrollToItem(index + 1)
+        }
+    }
+    LazyColumn(state = listState, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Quran Reflections", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(6.dp))

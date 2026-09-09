@@ -23,7 +23,8 @@ object ReflectionLibrary {
     )
 
     fun find(id: String): QuranReflection? = items.firstOrNull { it.id == id }
-    fun daily(date: LocalDate): QuranReflection = items[Math.floorMod(date.toEpochDay(), items.size.toLong()).toInt()]
+    fun at(date: LocalDate, offset: Int): QuranReflection = items[Math.floorMod(date.toEpochDay() + offset.toLong(), items.size.toLong()).toInt()]
+    fun daily(date: LocalDate): QuranReflection = at(date, 0)
     fun search(query: String): List<QuranReflection> {
         val q = query.trim()
         if (q.isEmpty()) return items

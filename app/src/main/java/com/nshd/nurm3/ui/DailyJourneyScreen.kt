@@ -22,7 +22,7 @@ import java.time.LocalDate
 fun DailyJourneyScreen(entries: List<Entry>, completions: List<Completion>, today: LocalDate, prefs: NurPreferences, model: NurViewModel, navigate: (String) -> Unit) {
     val active = entries.filter { EntrySchedule.isActive(it, today) }
     val done = DailyProgress.completedIds(completions, today)
-    val summary = DailyProgress.summary(entries, completions, today)
+    val summary = DailyProgress.lightSummary(entries, completions, today)
     LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -57,6 +57,7 @@ fun DailyJourneyScreen(entries: List<Entry>, completions: List<Completion>, toda
                 }
             }
         }
+        item { DailyReflectionCard(today) { id -> navigate("reflections?verse=$id") } }
     }
 }
 
