@@ -76,7 +76,10 @@ fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
         large = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
         extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
     )
-    CompositionLocalProvider(LocalNurCompact provides prefs.compactCards) {
+    CompositionLocalProvider(
+        LocalNurCompact provides prefs.compactCards,
+        LocalNurReduceMotion provides prefs.reduceMotion
+    ) {
         MaterialTheme(colorScheme = scheme, typography = typography(prefs.typeScale), shapes = shapes, content = content)
     }
 }
