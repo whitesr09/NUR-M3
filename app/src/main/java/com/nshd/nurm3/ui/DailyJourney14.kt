@@ -46,7 +46,7 @@ fun DailyJourneyScreen14(entries: List<Entry>, completions: List<Completion>, to
                     Icon(Icons.Default.WbTwilight, null, tint = MaterialTheme.colorScheme.primary)
                     Column(Modifier.weight(1f)) {
                         Text("Your next step", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text(if (nextPrayer == null) "All five prayers checked" else "Next unchecked prayer: ${nextPrayer.title}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (prayers.isEmpty()) "Loading your prayer checklist…" else if (nextPrayer == null) "All five prayers checked" else "Next unchecked prayer: ${nextPrayer.title}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
                 if (next != null) {
@@ -57,7 +57,7 @@ fun DailyJourneyScreen14(entries: List<Entry>, completions: List<Completion>, to
                         NurPrimaryAction(if (saving) "Saving…" else "Mark complete", { model.complete(next.id, today, true) }, modifier = Modifier.weight(1f), enabled = !saving && today == LocalDate.now(), icon = { Icon(Icons.Default.Check, null, Modifier.size(18.dp)) })
                         OutlinedButton(onClick = { navigate(if (next.kind == NurKind.PRAYER) "journey" else next.kind) }, modifier = Modifier.heightIn(min = 52.dp)) { Text("Open") }
                     }
-                } else Text("Everything scheduled for today is complete. Your saved entries remain available tomorrow.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                } else Text(if (prayers.isEmpty()) "Your saved entries will appear as soon as they are loaded." else "Everything scheduled for today is complete. Your saved entries remain available tomorrow.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         item {
@@ -106,6 +106,7 @@ private fun JourneySection14(id: String, entries: List<Entry>, count: Int, done:
     val title = JourneyCard.titles[id] ?: id
     val fraction = if (entries.isEmpty()) 0f else count.toFloat() / entries.size
     val reduce = LocalNurReduceMotion.current
+    var showAll by remember(id, today) { mutableStateOf(false) }
     NurPanel(Modifier.fillMaxWidth().then(if (reduce) Modifier else Modifier.animateContentSize())) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Column(Modifier.weight(1f)) {
@@ -118,14 +119,17 @@ private fun JourneySection14(id: String, entries: List<Entry>, count: Int, done:
         if (!collapsed) {
             NurLinearProgress(fraction, today, "$title progress")
             if (entries.isEmpty()) Text("Nothing scheduled today. Your saved entries are still available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            else if (size != JourneySize.COMPACT) {
-                val limit = if (size == JourneySize.EXPANDED) 8 else 2
+            else {
+                val limit = if (id == JourneyCard.PRAYERS) {
+                    if (size == JourneySize.EXPANDED || showAll) entries.size else if (size == JourneySize.COMPACT) 0 else 2
+                } else if (size == JourneySize.COMPACT) 0 else if (size == JourneySize.EXPANDED) 8 else 2
                 entries.take(limit).forEach { entry ->
                     ChecklistRow(entry, entry.id in done, { onCheck(entry, it) }, date = today, pending = CompletionGate.key(entry.id, today) in pending)
                 }
-                if (entries.size > limit) TextButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) { Text(if (id == JourneyCard.PRAYERS) "View full prayer checklist" else "View all ${entries.size} entries") }
+                if (id == JourneyCard.PRAYERS && limit < entries.size) TextButton(onClick = { showAll = true }, modifier = Modifier.fillMaxWidth()) { Text("Show all five prayers") }
+                else if (id == JourneyCard.PRAYERS && showAll && size != JourneySize.EXPANDED) TextButton(onClick = { showAll = false }, modifier = Modifier.fillMaxWidth()) { Text("Show fewer prayers") }
+                else if (id != JourneyCard.PRAYERS && entries.size > limit) TextButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) { Text(if (size == JourneySize.COMPACT) "Open $title" else "View all ${entries.size} entries") }
             }
-            if (size == JourneySize.COMPACT && id != JourneyCard.PRAYERS) TextButton(onClick = onOpen, modifier = Modifier.fillMaxWidth()) { Text("Open $title") }
         }
     }
 }
