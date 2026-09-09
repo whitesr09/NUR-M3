@@ -40,16 +40,22 @@ val NurMainTabs = listOf(
 )
 
 private val routeTitles = mapOf(
-    "settings" to "Settings", "appearance" to "Appearance Studio", "layout" to "Customize Journey",
-    "insights" to "Insights", "backup" to "Backup & restore", "privacy" to "Privacy",
-    "dhikr" to "Dhikr", "reflections?verse={verse}" to "Quran Reflections"
+    "settings" to "Settings", "appearance" to "Appearance Studio", "fonts" to "Typography",
+    "glass" to "Glass & depth", "layout" to "Customize Journey", "ai" to "NUR AI",
+    "insights" to "Insights", "backup" to "Backup & restore", "secure-backup" to "Encrypted backup",
+    "backup-health" to "Backup health", "privacy" to "Privacy", "widgets" to "Widgets",
+    "accessibility" to "Accessibility", "focus" to "Focus", "dhikr" to "Dhikr",
+    "reflections" to "Quran Reflections"
 )
 
 @Composable
 fun NurTopBar(route: String, today: LocalDate, onBack: () -> Unit, onSettings: () -> Unit) {
     val home = route == "journey"
     val auxiliary = route !in NurMainTabs.map { it.route }
-    Surface(color = MaterialTheme.colorScheme.background, tonalElevation = 0.dp) {
+    val glass = LocalNurGlass.current
+    val scheme = MaterialTheme.colorScheme
+    val chromeColor = if (glass.enabled) scheme.background.copy(alpha = if (glass.liquid) 0.58f else 0.74f) else scheme.background
+    Surface(color = chromeColor, tonalElevation = 0.dp) {
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 20.dp)) {
             Row(Modifier.fillMaxWidth().heightIn(min = 64.dp), verticalAlignment = Alignment.CenterVertically) {
                 if (auxiliary) {
@@ -59,20 +65,20 @@ fun NurTopBar(route: String, today: LocalDate, onBack: () -> Unit, onSettings: (
                     Text(routeTitles[route] ?: "NUR", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 } else {
                     Text("نُور", modifier = Modifier.weight(1f), style = MaterialTheme.typography.headlineMedium.copy(fontSize = 31.sp, fontFamily = FontFamily.Serif), fontWeight = FontWeight.Bold, color = NurDesign.gold)
-                    if (home) Text(today.format(DateTimeFormatter.ofPattern("d MMM yyyy")), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    else Text(NurMainTabs.firstOrNull { it.route == route }?.label ?: "NUR", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (home) Text(today.format(DateTimeFormatter.ofPattern("d MMM yyyy")), style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+                    else Text(NurMainTabs.firstOrNull { it.route == route }?.label ?: "NUR", style = MaterialTheme.typography.titleSmall, color = scheme.onSurfaceVariant)
                 }
                 if (!auxiliary) {
                     Spacer(Modifier.width(8.dp))
                     IconButton(onClick = onSettings, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Default.Settings, contentDescription = "Open settings", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Icon(Icons.Default.Settings, contentDescription = "Open settings", tint = scheme.onSurfaceVariant)
                     }
                 }
             }
             if (home) {
-                Text("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 2)
+                Text("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium, color = scheme.primary, maxLines = 2)
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+            HorizontalDivider(color = scheme.outlineVariant.copy(alpha = if (glass.enabled) 0.38f else 0.55f))
         }
     }
 }
@@ -81,9 +87,11 @@ fun NurTopBar(route: String, today: LocalDate, onBack: () -> Unit, onSettings: (
 fun NurBottomBar(current: String, onNavigate: (String) -> Unit) {
     val scheme = MaterialTheme.colorScheme
     val reduce = LocalNurReduceMotion.current
-    Surface(color = scheme.background, tonalElevation = 0.dp) {
+    val glass = LocalNurGlass.current
+    val chromeColor = if (glass.enabled) scheme.background.copy(alpha = if (glass.liquid) 0.60f else 0.76f) else scheme.background
+    Surface(color = chromeColor, tonalElevation = 0.dp) {
         Column {
-            HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.65f))
+            HorizontalDivider(color = scheme.outlineVariant.copy(alpha = if (glass.enabled) 0.42f else 0.65f))
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 7.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 NurMainTabs.forEach { item ->
                     val selected = current == item.route
@@ -91,7 +99,7 @@ fun NurBottomBar(current: String, onNavigate: (String) -> Unit) {
                     val interaction = remember { MutableInteractionSource() }
                     Column(
                         Modifier.weight(1f).heightIn(min = 58.dp).clip(MaterialTheme.shapes.medium)
-                            .background(if (selected) scheme.primary.copy(alpha = 0.10f) else Color.Transparent)
+                            .background(if (selected) scheme.primary.copy(alpha = if (glass.enabled) 0.16f else 0.10f) else Color.Transparent)
                             .clickable(interactionSource = interaction, indication = ripple(), role = Role.Tab) { onNavigate(item.route) }
                             .semantics { this.selected = selected },
                         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
