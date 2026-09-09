@@ -1,10 +1,12 @@
 package com.nshd.nurm3
 
 import android.app.Application
+import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.nshd.nurm3.data.*
 import com.nshd.nurm3.ui.JourneyLayout
+import com.nshd.nurm3.ui.JourneyOptions
 import java.time.LocalDate
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -19,6 +21,7 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     private val repo = NurRepository(database.dao())
     private val dhikrRepo = DhikrRepository(database.dhikrDao())
     private val settings = NurSettings(application)
+    private val fontStore = NurFontStore(application)
     val preferences = settings.preferences.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NurPreferences())
     val entries = repo.entries.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val allEntries = repo.allEntries.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -36,8 +39,6 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     val completionPending: StateFlow<Set<String>> = _completionPending.asStateFlow()
     private val _uiEvents = MutableSharedFlow<String>(extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val uiEvents: SharedFlow<String> = _uiEvents.asSharedFlow()
-
-    /** Each accepted counter tap is serialized, not discarded while a previous tap is saving. */
     private val dhikrMutationMutex = Mutex()
     private val _dhikrPending = MutableStateFlow<Map<String, Int>>(emptyMap())
     val dhikrPending: StateFlow<Map<String, Int>> = _dhikrPending.asStateFlow()
@@ -58,11 +59,8 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun add(kind: String, title: String) = viewModelScope.launch { repo.add(kind, title, entries.value.size, today.value) }
     fun addEntry(entry: Entry) = viewModelScope.launch { repo.saveNew(entry.copy(position = entries.value.size)) }
     fun updateEntry(entry: Entry) = viewModelScope.launch { repo.updateEntry(entry) }
-
-    /** The editor waits for a real database result before it closes. */
     suspend fun persistEntry(entry: Entry, isNew: Boolean): Boolean =
         if (isNew) repo.saveNew(entry.copy(position = entries.value.size)) else repo.updateEntry(entry)
-
     suspend fun archiveEntry(id: String): Boolean = repo.delete(id)
     suspend fun restoreEntry(id: String): Boolean = repo.restore(id)
 
@@ -95,7 +93,22 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun choice(key: String, value: String) = viewModelScope.launch { settings.updateChoice(key, value) }
     fun typeScale(value: Float) = viewModelScope.launch { settings.updateScale(value) }
     fun journey(layout: JourneyLayout) = viewModelScope.launch { settings.saveJourney(layout) }
+    fun journeyOptions(transform: (JourneyOptions) -> JourneyOptions) = viewModelScope.launch { settings.updateJourneyOptions(transform) }
+    fun journeyPreset(name: String) = viewModelScope.launch {
+        try { settings.saveJourneyPreset(name); _uiEvents.emit("Journey preset saved.") }
+        catch (cancelled: CancellationException) { throw cancelled }
+        catch (error: Exception) { _uiEvents.emit(error.message ?: "Could not save the preset.") }
+    }
+    fun applyJourneyPreset() = viewModelScope.launch { settings.applyJourneyPreset() }
+    fun applyJourneyLayout(layout: JourneyLayout) = viewModelScope.launch { settings.applyJourneyLayout(layout) }
     fun resetAppearance() = viewModelScope.launch { settings.resetAppearance() }
+
+    /** Import into app-private storage before changing the selected font. */
+    suspend fun importFont(uri: Uri): String {
+        val imported = fontStore.import(uri)
+        settings.selectCustomFont(imported.id, imported.name)
+        return imported.name
+    }
 
     /** Capture the tap's local date before waiting for other writes. */
     suspend fun incrementDhikr(id: String): Boolean {
