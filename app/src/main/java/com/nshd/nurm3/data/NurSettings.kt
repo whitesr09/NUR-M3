@@ -26,7 +26,8 @@ data class NurPreferences(
     val backupReminders: Boolean = true,
     val widgetsEnabled: Boolean = true,
     val companionModules: Boolean = false,
-    val nurAiEnabled: Boolean = false
+    val nurAiEnabled: Boolean = false,
+    val dhikrHaptics: Boolean = true
 )
 
 class NurSettings(private val context: Context) {
@@ -48,6 +49,7 @@ class NurSettings(private val context: Context) {
     private val widgetsEnabled = booleanPreferencesKey("widgets_enabled")
     private val companionModules = booleanPreferencesKey("companion_modules")
     private val nurAiEnabled = booleanPreferencesKey("nur_ai_enabled")
+    private val dhikrHaptics = booleanPreferencesKey("dhikr_haptics")
 
     val preferences: Flow<NurPreferences> = context.nurDataStore.data.map { p ->
         val selectedMode = p[mode] ?: if (p[dark] ?: true) "dark" else "light"
@@ -69,7 +71,8 @@ class NurSettings(private val context: Context) {
             backupReminders = p[backupReminders] ?: true,
             widgetsEnabled = p[widgetsEnabled] ?: true,
             companionModules = p[companionModules] ?: false,
-            nurAiEnabled = p[nurAiEnabled] ?: false
+            nurAiEnabled = p[nurAiEnabled] ?: false,
+            dhikrHaptics = p[dhikrHaptics] ?: true
         )
     }
 
@@ -89,6 +92,7 @@ class NurSettings(private val context: Context) {
                 "widgets" -> p[widgetsEnabled] = value
                 "companion_modules" -> p[companionModules] = value
                 "nur_ai" -> p[nurAiEnabled] = value
+                "dhikr_haptics" -> p[dhikrHaptics] = value
             }
         }
     }
