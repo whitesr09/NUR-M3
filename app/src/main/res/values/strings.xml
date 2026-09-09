@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">NUR</string>
-    <string name="widget_description">NUR Daily Journey quick widget</string>
+    <string name="widget_description">NUR Daily Light and quick actions</string>
+    <string name="widget_prayer_description">NUR prayer checklist progress</string>
+    <string name="widget_task_description">NUR Amanah task progress</string>
+    <string name="widget_quick_description">NUR quick shortcuts for tasks, Dhikr and Focus</string>
 </resources>
