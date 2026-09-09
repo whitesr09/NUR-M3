@@ -93,6 +93,7 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun typeScale(value: Float) = viewModelScope.launch { settings.updateScale(value) }
     fun glassIntensity(value: Float) = viewModelScope.launch { settings.updateGlassIntensity(value) }
     fun glassBlurRadius(value: Int) = viewModelScope.launch { settings.updateGlassBlurRadius(value) }
+    fun bottomNavigation(routes: List<String>) = viewModelScope.launch { settings.saveBottomNavigation(routes) }
     fun journey(layout: JourneyLayout) = viewModelScope.launch { settings.saveJourney(layout) }
     fun journeyOptions(transform: (JourneyOptions) -> JourneyOptions) = viewModelScope.launch { settings.updateJourneyOptions(transform) }
     fun journeyPreset(name: String) = viewModelScope.launch {
