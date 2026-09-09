@@ -24,6 +24,7 @@ fun PowerSettingsScreen(prefs: NurPreferences, model: NurViewModel, navigate: (S
         }
         item { PowerLink(Icons.Default.Palette, "Appearance Studio", "Colors, typography, density and motion") { navigate("appearance") } }
         item { PowerLink(Icons.Default.ViewAgenda, "Daily Journey", "Reorder, hide and arrange your dashboard") { navigate("layout") } }
+        item { PowerLink(Icons.Default.MenuBook, "Quran Reflections", "Read a curated collection offline, with references") { navigate("reflections") } }
         item { PowerLink(Icons.Default.Insights, "Insights", "Real completion history and habit streaks") { navigate("insights") } }
         item { PowerLink(Icons.Default.Backup, "Backup & restore", "Export, preview, merge and recover your records") { navigate("backup") } }
         item { PowerLink(Icons.Default.Lock, "Privacy & app lock", if (configured) "App lock enabled" else "PIN, device authentication and private previews") { navigate("privacy") } }
@@ -38,7 +39,7 @@ fun PowerSettingsScreen(prefs: NurPreferences, model: NurViewModel, navigate: (S
             HorizontalDivider()
             Text("NUR Material 3 • 0.4.0 development", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 12.dp))
             Text("Made by NSHD", style = MaterialTheme.typography.labelSmall)
-            Text("AI and companion modules will appear here only when their functional implementations are ready.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Other companion modules and NUR AI will appear here only when their functional implementations are ready.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
