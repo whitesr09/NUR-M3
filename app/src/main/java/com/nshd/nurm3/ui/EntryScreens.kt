@@ -16,7 +16,6 @@ import com.nshd.nurm3.data.*
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import java.util.UUID
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,19 +41,19 @@ fun EntryScreen(title: String, subtitle: String, kind: String, entries: List<Ent
         }
         item {
             SectionCard("Today's progress", "${summary.completed} of ${summary.total} completed", null) {
-                LinearProgressIndicator(progress = { summary.fraction }, modifier = Modifier.fillMaxWidth())
+                NurLinearProgress(summary.fraction, today, "$title progress")
             }
         }
         if (section.isEmpty()) item { Text("No entries yet. Add one above to begin.", style = MaterialTheme.typography.bodyMedium) }
         if (active.isNotEmpty()) item { Text("Scheduled today", style = MaterialTheme.typography.titleMedium) }
         items(active, key = { it.id }) { entry ->
-            EntryCard(entry, entry.id in done, { model.complete(entry.id, today, it) }, { editing = entry }, { deleting = entry })
+            EntryCard(entry, entry.id in done, { model.complete(entry.id, today, it) }, { editing = entry }, { deleting = entry }, date = today)
         }
         val other = section.filterNot { it in active }
         if (other.isNotEmpty()) {
             item { Text("Other saved entries", style = MaterialTheme.typography.titleMedium); Text("These are not scheduled today, but remain available to edit.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
             items(other, key = { it.id }) { entry ->
-                EntryCard(entry, false, {}, { editing = entry }, { deleting = entry }, enabled = false)
+                EntryCard(entry, false, {}, { editing = entry }, { deleting = entry }, enabled = false, date = today)
             }
         }
     }
@@ -68,12 +67,12 @@ fun EntryScreen(title: String, subtitle: String, kind: String, entries: List<Ent
 }
 
 @Composable
-private fun EntryCard(entry: Entry, checked: Boolean, onChecked: (Boolean) -> Unit, onEdit: () -> Unit, onArchive: () -> Unit, enabled: Boolean = true) {
+private fun EntryCard(entry: Entry, checked: Boolean, onChecked: (Boolean) -> Unit, onEdit: () -> Unit, onArchive: () -> Unit, enabled: Boolean = true, date: LocalDate) {
     ElevatedCard(Modifier.fillMaxWidth()) {
         ChecklistRow(entry, checked, onChecked, enabled = enabled, trailing = {
             IconButton(onClick = onEdit) { Icon(Icons.Default.Edit, contentDescription = "Edit ${entry.title}") }
             IconButton(onClick = onArchive) { Icon(Icons.Default.DeleteOutline, contentDescription = "Archive ${entry.title}") }
-        })
+        }, date = date)
     }
 }
 
