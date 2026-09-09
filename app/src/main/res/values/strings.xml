@@ -5,4 +5,18 @@
     <string name="widget_prayer_description">NUR prayer checklist progress</string>
     <string name="widget_task_description">NUR Amanah task progress</string>
     <string name="widget_quick_description">NUR quick shortcuts for tasks, Dhikr and Focus</string>
+    <string name="accessibility_title">Accessibility</string>
+    <string name="accessibility_subtitle">Make reading and interaction more comfortable</string>
+    <string name="accessibility_language">Language</string>
+    <string name="accessibility_text_size">Text size</string>
+    <string name="accessibility_contrast">High contrast</string>
+    <string name="accessibility_motion">Reduce motion</string>
+    <string name="accessibility_hints">Show helpful hints</string>
+    <string name="accessibility_preview">Reading preview</string>
+    <string name="accessibility_system">Follow system</string>
+    <string name="accessibility_english">English</string>
+    <string name="accessibility_malayalam">Malayalam</string>
+    <string name="accessibility_arabic">Arabic</string>
+    <string name="accessibility_save">Save</string>
+    <string name="accessibility_review_note">Only selected new-feature labels have reviewed translations. A complete app translation is not yet available.</string>
 </resources>
