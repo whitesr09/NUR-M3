@@ -123,5 +123,9 @@ class DhikrRepository(private val dao: DhikrDao) {
     suspend fun increment(id: String, date: LocalDate): Boolean = dao.increment(id, date.toString())
     suspend fun resetSession(id: String) = dao.resetSession(id)
     suspend fun archive(id: String) = dao.archivePhrase(id)
+    suspend fun restore(id: String) {
+        val existing = dao.getPhrase(id) ?: return
+        if (existing.archived) dao.savePhrase(existing.copy(archived = false))
+    }
     suspend fun seedDefaults() = dao.seedDefaults()
 }
