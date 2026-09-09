@@ -54,9 +54,32 @@ private fun amoledScheme(base: ColorScheme): ColorScheme = base.copy(
     onBackground = Color(0xFFE8EDF0), onSurface = Color(0xFFE8EDF0),
     onSurfaceVariant = Color(0xFFB1BEC6), outlineVariant = Color(0xFF383838)
 )
+
+private fun glassScheme(base: ColorScheme, glass: NurGlassStyle): ColorScheme {
+    if (!glass.enabled) return base
+    val surfaceAlpha = when (glass.mode) {
+        "subtle" -> 0.92f
+        "frosted" -> 0.78f
+        else -> 0.68f
+    }
+    val variantAlpha = (surfaceAlpha - 0.08f).coerceAtLeast(0.55f)
+    return base.copy(
+        surface = base.surface.copy(alpha = surfaceAlpha),
+        surfaceVariant = base.surfaceVariant.copy(alpha = variantAlpha),
+        surfaceContainerLowest = base.surfaceContainerLowest.copy(alpha = surfaceAlpha),
+        surfaceContainerLow = base.surfaceContainerLow.copy(alpha = variantAlpha),
+        surfaceContainer = base.surfaceContainer.copy(alpha = variantAlpha),
+        surfaceContainerHigh = base.surfaceContainerHigh.copy(alpha = variantAlpha),
+        surfaceContainerHighest = base.surfaceContainerHighest.copy(alpha = variantAlpha),
+        primaryContainer = base.primaryContainer.copy(alpha = if (glass.liquid) 0.82f else 0.90f),
+        secondaryContainer = base.secondaryContainer.copy(alpha = if (glass.liquid) 0.78f else 0.88f)
+    )
+}
+
 @Composable
 fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
     val context = LocalContext.current
+    val glass = LocalNurGlass.current
     val dark = when (prefs.themeMode) {
         "light" -> false
         "system" -> isSystemInDarkTheme()
@@ -77,7 +100,7 @@ fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
         }
     }
     val primary = paletteColor(prefs.palette, dark)
-    val scheme = when {
+    val baseScheme = when {
         prefs.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val base = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
             if (prefs.themeMode == "amoled") amoledScheme(base) else base
@@ -106,6 +129,7 @@ fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
             outline = Color(0xFF75838A), outlineVariant = Color(0xFFD5DDDA), surfaceTint = primary
         )
     }
+    val scheme = glassScheme(baseScheme, glass)
     val shapes = if (prefs.softShapes) Shapes(
         extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
         small = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
