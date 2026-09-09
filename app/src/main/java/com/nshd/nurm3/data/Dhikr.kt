@@ -58,11 +58,11 @@ interface DhikrDao {
     suspend fun getPhrase(id: String): DhikrPhrase?
     @Query("SELECT * FROM dhikr_days WHERE phraseId = :id AND localDate = :date LIMIT 1")
     suspend fun getDay(id: String, date: String): DhikrDay?
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun savePhrase(phrase: DhikrPhrase)
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPhraseIgnoringConflict(phrase: DhikrPhrase): Long
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Upsert
     suspend fun saveDay(day: DhikrDay)
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDayIgnoringConflict(day: DhikrDay): Long
