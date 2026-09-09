@@ -175,6 +175,7 @@ fun NurApp(model: NurViewModel, focus: FocusController, lock: NurLock, authentic
                     composable("insights") { InsightsScreen(allEntries, completions, today) }
                     composable("backup") { BackupScreen() }
                     composable("secure-backup") { SecureBackupScreen() }
+                    composable("backup-health") { BackupHealthScreen() }
                     composable("privacy") { PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) } }
                     composable("dhikr") { DhikrScreen(model, prefs, today) }
                     composable("focus") { FocusScreen(focus) }
