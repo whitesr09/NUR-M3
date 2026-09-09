@@ -1,6 +1,7 @@
 package com.nshd.nurm3.ui
 
 import android.os.Build
+import android.graphics.RenderEffect
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -15,17 +16,16 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
-import android.graphics.RenderEffect
 import com.nshd.nurm3.data.NurPreferences
 import com.nshd.nurm3.data.VisualPreferences
 
 val LocalNurVisual = staticCompositionLocalOf { VisualPreferences() }
 
-/** Preserves the existing font, palette, AMOLED and dynamic-color implementation. */
+/** Preserves existing typography, colors and accessibility while installing advanced choices. */
 @Composable
 fun NurTheme15(prefs: NurPreferences, visual: VisualPreferences, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalNurVisual provides visual, LocalNurGlass provides visual.glass) {
-        NurTheme(prefs, content)
+        NurAdvancedMotion(visual) { NurTheme(prefs, content) }
     }
 }
 
