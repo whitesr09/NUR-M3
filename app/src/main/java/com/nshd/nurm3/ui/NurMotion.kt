@@ -13,7 +13,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalMotionDurationScale
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -33,7 +32,7 @@ object NurMotion {
 @Composable
 fun rememberNurProgress(target: Float, date: LocalDate, label: String): Float {
     val value = NurMotion.fraction(target)
-    val reduceMotion = LocalNurReduceMotion.current || LocalMotionDurationScale.current.scaleFactor <= 0f
+    val reduceMotion = LocalNurReduceMotion.current
     val state = remember(date, label) { Animatable(value) }
     LaunchedEffect(state, value, reduceMotion) {
         if (reduceMotion) state.snapTo(value)

@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalMotionDurationScale
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -81,7 +80,7 @@ fun NurTopBar(route: String, today: LocalDate, onBack: () -> Unit, onSettings: (
 @Composable
 fun NurBottomBar(current: String, onNavigate: (String) -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val reduce = LocalNurReduceMotion.current || LocalMotionDurationScale.current.scaleFactor <= 0f
+    val reduce = LocalNurReduceMotion.current
     Surface(color = scheme.background, tonalElevation = 0.dp) {
         Column {
             HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.65f))
