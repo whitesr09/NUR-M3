@@ -9,21 +9,21 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.nshd.nurm3.data.NurPreferences
 
-private val Night = Color(0xFF101820)
-private val NightSurface = Color(0xFF19242E)
-private val Gold = Color(0xFFD9B96F)
-private val Light = Color(0xFFFAF8F2)
-
+private val Night = Color(0xFF0B131B)
+private val NightSurface = Color(0xFF111C25)
+private val Light = Color(0xFFF7F7F4)
 val LocalNurCompact = staticCompositionLocalOf { false }
 
 private fun paletteColor(name: String, dark: Boolean): Color = when (name) {
     "ocean" -> if (dark) Color(0xFFA9CEE8) else Color(0xFF315D78)
     "sage" -> if (dark) Color(0xFFADD1B9) else Color(0xFF3C6751)
     "rose" -> if (dark) Color(0xFFE7B9C6) else Color(0xFF8B465D)
-    else -> if (dark) Gold else Color(0xFF806017)
+    else -> if (dark) NurDesign.gold else Color(0xFF806017)
 }
 
 private fun typography(scale: Float): Typography {
@@ -31,10 +31,16 @@ private fun typography(scale: Float): Typography {
     fun TextStyle.scaled() = copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
     return Typography(
         displayLarge = base.displayLarge.scaled(), displayMedium = base.displayMedium.scaled(), displaySmall = base.displaySmall.scaled(),
-        headlineLarge = base.headlineLarge.scaled(), headlineMedium = base.headlineMedium.scaled(), headlineSmall = base.headlineSmall.scaled(),
-        titleLarge = base.titleLarge.scaled(), titleMedium = base.titleMedium.scaled(), titleSmall = base.titleSmall.scaled(),
+        headlineLarge = base.headlineLarge.scaled().copy(fontWeight = FontWeight.SemiBold),
+        headlineMedium = base.headlineMedium.scaled().copy(fontWeight = FontWeight.SemiBold),
+        headlineSmall = base.headlineSmall.scaled().copy(fontWeight = FontWeight.SemiBold),
+        titleLarge = base.titleLarge.scaled().copy(fontWeight = FontWeight.SemiBold),
+        titleMedium = base.titleMedium.scaled().copy(fontWeight = FontWeight.SemiBold),
+        titleSmall = base.titleSmall.scaled().copy(fontWeight = FontWeight.SemiBold),
         bodyLarge = base.bodyLarge.scaled(), bodyMedium = base.bodyMedium.scaled(), bodySmall = base.bodySmall.scaled(),
-        labelLarge = base.labelLarge.scaled(), labelMedium = base.labelMedium.scaled(), labelSmall = base.labelSmall.scaled()
+        labelLarge = base.labelLarge.scaled().copy(fontWeight = FontWeight.SemiBold),
+        labelMedium = base.labelMedium.scaled(),
+        labelSmall = base.labelSmall.scaled().copy(letterSpacing = 0.3.sp)
     )
 }
 
@@ -51,30 +57,38 @@ fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
         prefs.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
             if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
         dark -> darkColorScheme(
-            primary = primary, onPrimary = Night, primaryContainer = Color(0xFF384550), onPrimaryContainer = Color(0xFFF2DEB0),
-            secondary = Color(0xFFB8C8CF), onSecondary = Night, secondaryContainer = Color(0xFF30414C), onSecondaryContainer = Color(0xFFD5E3E8),
-            tertiary = Color(0xFFB8CBBF), onTertiary = Night, background = Night, onBackground = Color(0xFFF0EEE8),
-            surface = NightSurface, onSurface = Color(0xFFF0EEE8), surfaceVariant = Color(0xFF26343E), onSurfaceVariant = Color(0xFFBAC6CC),
-            outline = Color(0xFF77858D), outlineVariant = Color(0xFF414D55), surfaceTint = primary
+            primary = primary, onPrimary = Night, primaryContainer = Color(0xFF40341F), onPrimaryContainer = Color(0xFFF7E5B7),
+            secondary = Color(0xFFB5C8D2), onSecondary = Night, secondaryContainer = Color(0xFF263844), onSecondaryContainer = Color(0xFFD9E5EB),
+            tertiary = Color(0xFFB8CBBF), onTertiary = Night,
+            background = Night, onBackground = Color(0xFFE8EDF0), surface = NightSurface, onSurface = Color(0xFFE8EDF0),
+            surfaceVariant = Color(0xFF263640), onSurfaceVariant = Color(0xFFB1BEC6),
+            surfaceContainerLowest = Night, surfaceContainerLow = Color(0xFF15212A), surfaceContainer = Color(0xFF1B2832),
+            surfaceContainerHigh = Color(0xFF23323C), surfaceContainerHighest = Color(0xFF2B3B46),
+            outline = Color(0xFF81909A), outlineVariant = Color(0xFF354650), surfaceTint = primary
         )
         else -> lightColorScheme(
-            primary = primary, onPrimary = Color.White, primaryContainer = Color(0xFFF4E3B8), onPrimaryContainer = Color(0xFF332809),
-            secondary = Color(0xFF6B6049), onSecondary = Color.White, secondaryContainer = Color(0xFFECE3D2), onSecondaryContainer = Color(0xFF262014),
-            tertiary = Color(0xFF52695A), onTertiary = Color.White, background = Light, onBackground = Color(0xFF202B31),
-            surface = Color(0xFFFFFDF7), onSurface = Color(0xFF202B31), surfaceVariant = Color(0xFFECE8DC), onSurfaceVariant = Color(0xFF5A6062),
-            outline = Color(0xFF777A78), outlineVariant = Color(0xFFD0D1CC), surfaceTint = primary
+            primary = primary, onPrimary = Color.White, primaryContainer = Color(0xFFF3E8CC), onPrimaryContainer = Color(0xFF4B370B),
+            secondary = Color(0xFF57666E), onSecondary = Color.White, secondaryContainer = Color(0xFFE3EAED), onSecondaryContainer = Color(0xFF283942),
+            tertiary = Color(0xFF52695A), onTertiary = Color.White,
+            background = Light, onBackground = Color(0xFF202B31), surface = Color(0xFFFDFDFA), onSurface = Color(0xFF202B31),
+            surfaceVariant = Color(0xFFE9EDEB), onSurfaceVariant = Color(0xFF56646A),
+            surfaceContainerLowest = Color.White, surfaceContainerLow = Color(0xFFF4F5F1), surfaceContainer = Color(0xFFEDF0EC),
+            surfaceContainerHigh = Color(0xFFE6EAE6), surfaceContainerHighest = Color(0xFFDEE4DF),
+            outline = Color(0xFF75838A), outlineVariant = Color(0xFFD5DDDA), surfaceTint = primary
         )
     }
     val shapes = if (prefs.softShapes) Shapes(
-        small = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-        medium = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-        large = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-        extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(32.dp)
+        extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
+        small = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+        medium = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+        large = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+        extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(24.dp)
     ) else Shapes(
+        extraSmall = androidx.compose.foundation.shape.RoundedCornerShape(2.dp),
         small = androidx.compose.foundation.shape.RoundedCornerShape(4.dp),
-        medium = androidx.compose.foundation.shape.RoundedCornerShape(8.dp),
-        large = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-        extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+        medium = androidx.compose.foundation.shape.RoundedCornerShape(7.dp),
+        large = androidx.compose.foundation.shape.RoundedCornerShape(10.dp),
+        extraLarge = androidx.compose.foundation.shape.RoundedCornerShape(14.dp)
     )
     CompositionLocalProvider(
         LocalNurCompact provides prefs.compactCards,
