@@ -21,8 +21,11 @@ data class JourneyLayout(val order: List<String>, val hidden: Set<String>) {
         next.add(index + offset, id)
         return copy(order = next)
     }
-    fun show(id: String, enabled: Boolean): JourneyLayout =
-        copy(hidden = if (enabled) hidden - id else hidden + id)
+    fun show(id: String, enabled: Boolean): JourneyLayout {
+        if (id !in order) return this
+        if (!enabled && id !in hidden && visible().size <= 1) return this
+        return copy(hidden = if (enabled) hidden - id else hidden + id)
+    }
 
     companion object {
         val DEFAULT = JourneyLayout(JourneyCard.all, emptySet())
@@ -31,7 +34,9 @@ data class JourneyLayout(val order: List<String>, val hidden: Set<String>) {
         fun restore(order: String?, hidden: String?): JourneyLayout {
             val known = JourneyCard.all
             val saved = order.orEmpty().split(',').filter { it in known }.distinct()
-            return JourneyLayout(saved + known.filterNot { it in saved }, hidden.orEmpty().split(',').filter { it in known }.toSet())
+            val savedHidden = hidden.orEmpty().split(',').filter { it in known }.toSet()
+            val normalized = JourneyLayout(saved + known.filterNot { it in saved }, savedHidden)
+            return if (normalized.visible().isEmpty()) normalized.copy(hidden = normalized.hidden - JourneyCard.LIGHT) else normalized
         }
     }
 }
