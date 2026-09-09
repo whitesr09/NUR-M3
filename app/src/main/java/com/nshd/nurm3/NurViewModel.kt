@@ -6,11 +6,14 @@ import androidx.lifecycle.viewModelScope
 import com.nshd.nurm3.data.*
 import com.nshd.nurm3.ui.JourneyLayout
 import java.time.LocalDate
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class NurViewModel(application: Application) : AndroidViewModel(application) {
-    private val repo = NurRepository(NurDatabase.get(application).dao())
+    private val database = NurDatabase.get(application)
+    private val repo = NurRepository(database.dao())
+    private val dhikrRepo = DhikrRepository(database.dhikrDao())
     private val settings = NurSettings(application)
     val preferences = settings.preferences.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), NurPreferences())
     val entries = repo.entries.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -18,15 +21,20 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     val completions = repo.completions.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     private val _today = MutableStateFlow(LocalDate.now())
     val today: StateFlow<LocalDate> = _today.asStateFlow()
+    val dhikrPhrases = dhikrRepo.phrases.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val dhikrSnapshots = today.flatMapLatest { dhikrRepo.snapshots(it) }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
         viewModelScope.launch {
-            val dao = NurDatabase.get(application).dao()
+            val dao = database.dao()
             if (dao.prayerCount() == 0) {
                 listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha").forEachIndexed { index, title ->
                     dao.saveEntry(Entry("prayer-${index + 1}", NurKind.PRAYER, title, index, System.currentTimeMillis()))
                 }
             }
+            dhikrRepo.seedDefaults()
         }
     }
 
@@ -41,4 +49,16 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun typeScale(value: Float) = viewModelScope.launch { settings.updateScale(value) }
     fun journey(layout: JourneyLayout) = viewModelScope.launch { settings.saveJourney(layout) }
     fun resetAppearance() = viewModelScope.launch { settings.resetAppearance() }
+
+    /** The actual local date is captured when the user taps, not when a screen was opened. */
+    suspend fun incrementDhikr(id: String): Boolean {
+        val saved = dhikrRepo.increment(id, LocalDate.now())
+        if (saved) refreshDate()
+        return saved
+    }
+    suspend fun addDhikr(title: String, target: Int) = dhikrRepo.add(title, target)
+    suspend fun updateDhikr(id: String, title: String, target: Int) = dhikrRepo.update(id, title, target)
+    suspend fun resetDhikrSession(id: String) = dhikrRepo.resetSession(id)
+    suspend fun archiveDhikr(id: String) = dhikrRepo.archive(id)
+    suspend fun restoreDhikr(id: String) = dhikrRepo.restore(id)
 }
