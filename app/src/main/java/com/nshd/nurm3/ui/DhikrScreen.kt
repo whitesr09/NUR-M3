@@ -67,7 +67,7 @@ fun DhikrScreen(model: NurViewModel, prefs: NurPreferences, today: LocalDate) {
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                snackbar?.showSnackbar("Could not save your change. Your existing records are unchanged.")
+                snackbar?.showSnackbar("Could not save your change. Please check your records and try again.")
             } finally {
                 busy = false
             }
@@ -75,16 +75,12 @@ fun DhikrScreen(model: NurViewModel, prefs: NurPreferences, today: LocalDate) {
     }
 
     LazyColumn(contentPadding = PaddingValues(NurDesign.pagePadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item {
-            NurPageHeading("Your remembrance", "Dhikr", "A calm, personal counter with your recorded history.")
-        }
+        item { NurPageHeading("Your remembrance", "Dhikr", "A calm, personal counter with your recorded history.") }
         if (snapshots.isNotEmpty()) {
             item {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = PaddingValues(vertical = 2.dp)) {
                     items(snapshots, key = { it.phrase.id }) { snapshot ->
-                        NurChoicePill(snapshot.phrase.title, selected?.phrase?.id == snapshot.phrase.id) {
-                            selectedId = snapshot.phrase.id
-                        }
+                        NurChoicePill(snapshot.phrase.title, selected?.phrase?.id == snapshot.phrase.id) { selectedId = snapshot.phrase.id }
                     }
                 }
             }
@@ -98,9 +94,7 @@ fun DhikrScreen(model: NurViewModel, prefs: NurPreferences, today: LocalDate) {
                             Text("PERSONAL SESSION", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
                             Text("Goal ${phrase.target}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             DhikrCounterRing(phrase, today)
-                            if (phrase.sessionCount >= phrase.target) {
-                                Text("Personal goal reached · You can continue counting", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
-                            }
+                            if (phrase.sessionCount >= phrase.target) Text("Personal goal reached · You can continue counting", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary, textAlign = TextAlign.Center)
                         }
                         NurPrimaryAction(
                             text = "Tap to count", onClick = {
@@ -133,13 +127,9 @@ fun DhikrScreen(model: NurViewModel, prefs: NurPreferences, today: LocalDate) {
                                 Spacer(Modifier.width(6.dp))
                                 Text("Edit")
                             }
-                            OutlinedButton(onClick = { resetId = phrase.id }, enabled = canManage && phrase.sessionCount > 0, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) {
-                                Text("Reset session")
-                            }
+                            OutlinedButton(onClick = { resetId = phrase.id }, enabled = canManage && phrase.sessionCount > 0, modifier = Modifier.weight(1f).heightIn(min = 48.dp)) { Text("Reset session") }
                         }
-                        TextButton(onClick = { archiveId = phrase.id }, enabled = canManage, modifier = Modifier.align(Alignment.CenterHorizontally)) {
-                            Text("Archive phrase")
-                        }
+                        TextButton(onClick = { archiveId = phrase.id }, enabled = canManage, modifier = Modifier.align(Alignment.CenterHorizontally)) { Text("Archive phrase") }
                     }
                 }
                 item(key = "totals-${phrase.id}") {
@@ -154,24 +144,15 @@ fun DhikrScreen(model: NurViewModel, prefs: NurPreferences, today: LocalDate) {
                 }
                 item(key = "history-${phrase.id}") {
                     val rows = remember(days, phrase.id) { DhikrHistory.rows(days, phrase.id) }
-                    DhikrHistoryPanel(
-                        phrase.title, rows, today, showHistory, historyFilter,
-                        onToggle = { showHistory = !showHistory }, onFilter = { historyFilter = it }
-                    )
+                    DhikrHistoryPanel(phrase.id, phrase.title, rows, today, showHistory, historyFilter, onToggle = { showHistory = !showHistory }, onFilter = { historyFilter = it })
                 }
             }
         } else {
-            item {
-                NurEmptyState(Icons.Default.TouchApp, "No active phrases", "Add a personal phrase or restore one from the archive. Existing history is preserved.", "Add a phrase") { editorId = "" }
-            }
+            item { NurEmptyState(Icons.Default.TouchApp, "No active phrases", "Add a personal phrase or restore one from the archive. Existing history is preserved.", "Add a phrase") { editorId = "" } }
         }
+        item { NurPrimaryAction("Add a custom phrase", { editorId = "" }, Modifier.fillMaxWidth(), enabled = canManage, icon = { Icon(Icons.Default.Add, contentDescription = null) }) }
         item {
-            NurPrimaryAction("Add a custom phrase", { editorId = "" }, Modifier.fillMaxWidth(), enabled = canManage, icon = { Icon(Icons.Default.Add, contentDescription = null) })
-        }
-        item {
-            NurSettingRow("Gentle tap feedback", "Optional haptic feedback after a count is saved", prefs.dhikrHaptics) {
-                model.setting("dhikr_haptics", it)
-            }
+            NurSettingRow("Gentle tap feedback", "Optional haptic feedback after a count is saved", prefs.dhikrHaptics) { model.setting("dhikr_haptics", it) }
         }
         if (archived.isNotEmpty()) {
             item {
@@ -208,37 +189,31 @@ fun DhikrScreen(model: NurViewModel, prefs: NurPreferences, today: LocalDate) {
                     editorId = null
                 }
             })
-        } else {
-            LaunchedEffect(id) { editorId = null }
-        }
+        } else LaunchedEffect(id) { editorId = null }
     }
     resetId?.let { id ->
         val phrase = allPhrases.firstOrNull { it.id == id }
         if (phrase == null || phrase.archived) {
             LaunchedEffect(id) { resetId = null }
-        } else {
-            AlertDialog(
-                onDismissRequest = { if (!busy) resetId = null },
-                title = { Text("Reset this session?") },
-                text = { Text("The session for ${phrase.title} will return to zero. Today's and lifetime recorded counts will remain unchanged.") },
-                confirmButton = { TextButton(onClick = { resetId = null; runTask { model.resetDhikrSession(id) } }, enabled = canManage) { Text("Reset session") } },
-                dismissButton = { TextButton(onClick = { resetId = null }) { Text("Cancel") } }
-            )
-        }
+        } else AlertDialog(
+            onDismissRequest = { if (!busy) resetId = null },
+            title = { Text("Reset this session?") },
+            text = { Text("The session for ${phrase.title} will return to zero. Today's and lifetime recorded counts will remain unchanged.") },
+            confirmButton = { TextButton(onClick = { resetId = null; runTask { model.resetDhikrSession(id) } }, enabled = canManage) { Text("Reset session") } },
+            dismissButton = { TextButton(onClick = { resetId = null }) { Text("Cancel") } }
+        )
     }
     archiveId?.let { id ->
         val phrase = allPhrases.firstOrNull { it.id == id }
         if (phrase == null || phrase.archived) {
             LaunchedEffect(id) { archiveId = null }
-        } else {
-            AlertDialog(
-                onDismissRequest = { if (!busy) archiveId = null },
-                title = { Text("Archive phrase?") },
-                text = { Text("${phrase.title} will leave the active counter list. Its session and dated history are preserved, and you can restore it later.") },
-                confirmButton = { TextButton(onClick = { archiveId = null; runTask { model.archiveDhikr(id); selectedId = "" } }, enabled = canManage) { Text("Archive") } },
-                dismissButton = { TextButton(onClick = { archiveId = null }) { Text("Cancel") } }
-            )
-        }
+        } else AlertDialog(
+            onDismissRequest = { if (!busy) archiveId = null },
+            title = { Text("Archive phrase?") },
+            text = { Text("${phrase.title} will leave the active counter list. Its session and dated history are preserved, and you can restore it later.") },
+            confirmButton = { TextButton(onClick = { archiveId = null; runTask { model.archiveDhikr(id); selectedId = "" } }, enabled = canManage) { Text("Archive") } },
+            dismissButton = { TextButton(onClick = { archiveId = null }) { Text("Cancel") } }
+        )
     }
 }
 
@@ -274,15 +249,11 @@ private fun DhikrMetric(label: String, value: String, modifier: Modifier = Modif
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun DhikrHistoryPanel(
-    phraseTitle: String,
-    rows: List<DhikrHistoryRow>,
-    today: LocalDate,
-    expanded: Boolean,
-    filter: String,
-    onToggle: () -> Unit,
-    onFilter: (String) -> Unit
+    phraseId: String, phraseTitle: String, rows: List<DhikrHistoryRow>, today: LocalDate,
+    expanded: Boolean, filter: String, onToggle: () -> Unit, onFilter: (String) -> Unit
 ) {
     val visible = remember(rows, today, filter) { if (filter == "recent") DhikrHistory.recent(rows, today) else rows }
+    var limit by rememberSaveable(phraseId, filter) { mutableIntStateOf(20) }
     val formatter = remember { DateTimeFormatter.ofPattern("EEE, d MMM yyyy", Locale.getDefault()) }
     NurPanel(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -303,12 +274,15 @@ private fun DhikrHistoryPanel(
             if (visible.isEmpty()) {
                 Text("No recorded counts in this period. No dates have been added or estimated.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             } else {
-                visible.forEach { row ->
+                visible.take(limit).forEach { row ->
                     Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text(row.date.format(formatter), modifier = Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
                         Text(row.count.toString(), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
+                if (limit < visible.size) TextButton(onClick = { limit = (limit + 20).coerceAtMost(visible.size) }, modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
+                    Text("Show more · ${visible.size - limit} remaining")
                 }
             }
             Text("These are saved counts by device-local date. Resetting a session does not erase them.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -334,7 +308,7 @@ private fun DhikrEditor(existing: DhikrPhrase?, saving: Boolean, onDismiss: () -
             Text(if (existing == null) "New Dhikr phrase" else "Edit phrase", style = MaterialTheme.typography.headlineSmall)
             Text("Choose a personal label and goal. Your recorded history stays separate from the session.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedTextField(value = title, onValueChange = { if (it.length <= 200) title = it }, label = { Text("Phrase or personal label") }, enabled = !saving, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, supportingText = { Text("${title.length}/200 characters") })
-            OutlinedTextField(value = target, onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) target = it }, label = { Text("Personal goal") }, enabled = !saving, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, isError = target.isNotEmpty() && parsed !in 1..DhikrRules.MAX_TARGET, supportingText = { Text("Choose 1–100,000. This is not a prescribed religious count.") })
+            OutlinedTextField(value = target, onValueChange = { if (it.length <= 6 && it.all(Char::isDigit)) target = it }, label = { Text("Personal goal") }, enabled = !saving, keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number), singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, isError = target.isNotEmpty() && (parsed == null || parsed !in 1..DhikrRules.MAX_TARGET), supportingText = { Text("Choose 1–100,000. This is not a prescribed religious count.") })
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 listOf(33, 99, 100).forEach { value -> NurChoicePill(value.toString(), parsed == value && !saving) { if (!saving) target = value.toString() } }
             }
