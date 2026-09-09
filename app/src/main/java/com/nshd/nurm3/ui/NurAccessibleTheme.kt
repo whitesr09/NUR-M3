@@ -1,8 +1,8 @@
 package com.nshd.nurm3.ui
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import com.nshd.nurm3.data.NurAccessibility
 import com.nshd.nurm3.data.NurPreferences
@@ -10,7 +10,11 @@ import com.nshd.nurm3.data.NurPreferences
 @Composable
 fun NurAccessibleTheme(prefs: NurPreferences, accessibility: NurAccessibility, content: @Composable () -> Unit) {
     NurTheme(prefs) {
-        val dark = prefs.themeMode != "light"
+        val dark = when (prefs.themeMode) {
+            "light" -> false
+            "system" -> isSystemInDarkTheme()
+            else -> true
+        }
         val base = MaterialTheme.colorScheme
         val scheme = if (!accessibility.highContrast) base else if (dark) base.copy(
             background = Color.Black, surface = Color.Black, surfaceVariant = Color(0xFF111111),
