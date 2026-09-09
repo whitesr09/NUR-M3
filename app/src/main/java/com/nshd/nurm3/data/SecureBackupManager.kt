@@ -9,7 +9,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
-import java.util.UUID
 
 /** Explicit portable export; credentials, AI history and private journal data are excluded. */
 data class SecureSnapshot(
@@ -23,17 +22,18 @@ class SecureBackupManager(private val context: Context) {
     private val main = NurDatabase.get(context)
     private val focus = FocusDatabase.get(context)
     private val legacy = BackupManager(context, main)
+    private val vault = RecoveryVault(context)
 
     suspend fun export(password: CharArray): String = withContext(Dispatchers.IO) {
         val core = legacy.export()
-        val (sessions, routines) = focus.withTransaction {
-            focus.dao().allSessions() to focus.dao().allRoutines()
-        }
+        val (sessions, routines) = focus.withTransaction { focus.dao().allSessions() to focus.dao().allRoutines() }
         val root = JSONObject().put("format", "NUR-M3-portable-v1").put("createdAt", System.currentTimeMillis())
             .put("core", JSONObject(core)).put("focusSessions", encodeSessions(sessions)).put("focusRoutines", encodeRoutines(routines))
         val plain = root.toString().toByteArray(Charsets.UTF_8)
-        require(plain.size <= SecureBackupCodec.MAX_PLAINTEXT) { "Backup is too large." }
-        SecureBackupCodec.encrypt(plain, password)
+        try {
+            require(plain.size <= SecureBackupCodec.MAX_PLAINTEXT) { "Backup is too large." }
+            SecureBackupCodec.encrypt(plain, password)
+        } finally { plain.fill(0) }
     }
 
     suspend fun preview(envelope: String, password: CharArray): SecureSnapshot = withContext(Dispatchers.IO) {
@@ -41,16 +41,15 @@ class SecureBackupManager(private val context: Context) {
         try {
             val root = JSONObject(String(plain, Charsets.UTF_8))
             require(root.getString("format") == "NUR-M3-portable-v1") { "Unsupported backup contents." }
-            val core = BackupCodec.decode(root.getJSONObject("core").toString())
-            val sessions = decodeSessions(root.getJSONArray("focusSessions"))
-            val routines = decodeRoutines(root.getJSONArray("focusRoutines"))
-            SecureSnapshot(core, sessions, routines, SecureBackupCodec.fingerprint(envelope))
+            val snapshot = SecureSnapshot(BackupCodec.decode(root.getJSONObject("core").toString()),
+                decodeSessions(root.getJSONArray("focusSessions")), decodeRoutines(root.getJSONArray("focusRoutines")), SecureBackupCodec.fingerprint(envelope))
+            validate(snapshot)
+            snapshot
         } finally { plain.fill(0) }
     }
 
     suspend fun merge(snapshot: SecureSnapshot): Int {
         validate(snapshot)
-        // Each database uses its own transaction. Existing identifiers win; never add counts together.
         val added = legacy.merge(snapshot.core)
         focus.withTransaction {
             val dao = focus.dao()
@@ -62,13 +61,15 @@ class SecureBackupManager(private val context: Context) {
         return added
     }
 
-    /** Replacement is deliberately separate from preview and requires explicit UI confirmation. */
+    /** Explicit replacement preserves encrypted recovery before either database is changed. */
     suspend fun replace(snapshot: SecureSnapshot) {
         validate(snapshot)
-        // The core manager preserves its own pre-replacement recovery snapshot.
-        // Focus has a separate recovery file; these two databases are not one atomic transaction.
-        val recovery = exportRecovery()
-        writeRecovery(recovery)
+        val recovery = focus.withTransaction {
+            JSONObject().put("format", "NUR-M3-focus-recovery-v1")
+                .put("sessions", encodeSessions(focus.dao().allSessions()))
+                .put("routines", encodeRoutines(focus.dao().allRoutines())).toString()
+        }
+        withContext(Dispatchers.IO) { vault.save("nur-focus", recovery.toByteArray(Charsets.UTF_8)) }
         legacy.replace(snapshot.core)
         focus.withTransaction {
             val dao = focus.dao()
@@ -79,18 +80,17 @@ class SecureBackupManager(private val context: Context) {
         }
     }
 
-    private suspend fun exportRecovery(): String = focus.withTransaction {
-        JSONObject().put("format", "NUR-M3-focus-recovery-v1")
-            .put("sessions", encodeSessions(focus.dao().allSessions()))
-            .put("routines", encodeRoutines(focus.dao().allRoutines())).toString()
-    }
-    private suspend fun writeRecovery(value: String) = withContext(Dispatchers.IO) {
-        val file = java.io.File(context.noBackupFilesDir, "nur-focus-recovery.json")
-        val temp = java.io.File(context.noBackupFilesDir, "nur-focus-recovery.tmp")
-        require(value.toByteArray().size <= SecureBackupCodec.MAX_PLAINTEXT)
-        java.io.FileOutputStream(temp).use { it.write(value.toByteArray(Charsets.UTF_8)); it.fd.sync() }
-        try { java.nio.file.Files.move(temp.toPath(), file.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE, java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
-        catch (_: java.nio.file.AtomicMoveNotSupportedException) { java.nio.file.Files.move(temp.toPath(), file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING) }
+    /** Recovery is read-only until the user explicitly confirms a restore. */
+    suspend fun recovery(): SecureSnapshot? = withContext(Dispatchers.IO) {
+        val core = legacy.recovery() ?: return@withContext null
+        val bytes = vault.read("nur-focus")
+        val focusRoot = bytes?.let { JSONObject(String(it, Charsets.UTF_8)) }
+        if (focusRoot != null) require(focusRoot.getString("format") == "NUR-M3-focus-recovery-v1")
+        val snapshot = SecureSnapshot(core,
+            focusRoot?.let { decodeSessions(it.getJSONArray("sessions")) } ?: emptyList(),
+            focusRoot?.let { decodeRoutines(it.getJSONArray("routines")) } ?: emptyList(), "Local recovery")
+        validate(snapshot)
+        snapshot
     }
 
     suspend fun write(uri: Uri, value: String) = withContext(Dispatchers.IO) {
