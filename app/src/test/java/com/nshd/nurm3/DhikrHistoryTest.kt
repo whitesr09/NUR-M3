@@ -28,8 +28,9 @@ class DhikrHistoryTest {
     }
 
     @Test fun recentWindowIncludesBothBoundaryDatesAndExcludesFutureDates() {
-        val rows = DhikrHistory.recent(DhikrHistory.rows(days, "a"), today)
-        assertEquals(listOf("2026-09-09", "2026-09-08", "2026-08-10"), rows.map { it.date.toString() })
+        val boundary = DhikrDay("a", "2026-08-11", 4)
+        val rows = DhikrHistory.recent(DhikrHistory.rows(days + boundary, "a"), today)
+        assertEquals(listOf("2026-09-09", "2026-09-08", "2026-08-11"), rows.map { it.date.toString() })
         assertEquals(37L, DhikrHistory.summary(rows).total)
         assertThrows(IllegalArgumentException::class.java) { DhikrHistory.recent(emptyList(), today, 0) }
     }
