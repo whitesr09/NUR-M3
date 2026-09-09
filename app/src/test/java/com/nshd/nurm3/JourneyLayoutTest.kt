@@ -23,4 +23,19 @@ class JourneyLayoutTest {
         assertFalse(JourneyCard.AMANAH in hidden.visible())
         assertTrue(JourneyCard.AMANAH in hidden.show(JourneyCard.AMANAH, true).visible())
     }
+
+    @Test fun lastVisibleCardCannotBeHidden() {
+        var layout = JourneyLayout.DEFAULT
+        JourneyCard.all.drop(1).forEach { layout = layout.show(it, false) }
+        assertEquals(listOf(JourneyCard.LIGHT), layout.visible())
+        assertEquals(layout, layout.show(JourneyCard.LIGHT, false))
+        assertEquals(JourneyCard.all, layout.show(JourneyCard.AMANAH, true).order)
+    }
+
+    @Test fun invalidSavedLayoutRecoversWithoutDiscardingOrder() {
+        val layout = JourneyLayout.restore("rhythm,amanah,light", JourneyCard.all.joinToString(","))
+        assertEquals(JourneyCard.RHYTHM, layout.order.first())
+        assertEquals(listOf(JourneyCard.LIGHT), layout.visible())
+        assertEquals(JourneyCard.all.size, layout.order.size)
+    }
 }
