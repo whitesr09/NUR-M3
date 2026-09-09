@@ -26,7 +26,7 @@ fun PowerSettingsScreen(prefs: NurPreferences, model: NurViewModel, navigate: (S
         item { PowerLink(Icons.Default.AccessibilityNew, "Accessibility & language", "Larger text, contrast, motion and language") { navigate("accessibility") } }
         item { Text("COMPANION TOOLS", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
         item { PowerLink(Icons.Default.Timer, "Focus & Routine Studio", "Work intervals, routine presets and real session history") { navigate("focus") } }
-        item { PowerLink(Icons.Default.AutoAwesome, "NUR AI", "Optional Gemini companion with your own API key") { navigate("ai") } }
+        item { PowerLink(Icons.Default.AutoAwesome, "NUR AI", "Optional Gemini companion with streaming and your own API key") { navigate("ai") } }
         item { PowerLink(Icons.Default.MenuBook, "Quran Reflections", "Offline reading with references") { navigate("reflections") } }
         item { PowerLink(Icons.Default.TouchApp, "Dhikr", "Personal counting and saved history") { navigate("dhikr") } }
         item { PowerLink(Icons.Default.Insights, "Insights", "Genuine activity and habit streaks") { navigate("insights") } }
@@ -35,6 +35,7 @@ fun PowerSettingsScreen(prefs: NurPreferences, model: NurViewModel, navigate: (S
         item { PowerLink(Icons.Default.Widgets, "Widget setup", "Add Daily Light, prayer, task or quick-action widgets from your Android launcher") { navigate("widgets") } }
         item { Text("PRIVACY & RELIABILITY", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold) }
         item { PowerLink(Icons.Default.EnhancedEncryption, "Encrypted backup", "Passphrase-protected export, preview and restore") { navigate("secure-backup") } }
+        item { PowerLink(Icons.Default.HealthAndSafety, "Backup health", "Read-only database integrity and local recovery checks") { navigate("backup-health") } }
         item { PowerLink(Icons.Default.Backup, "Legacy backup & restore", "Existing JSON export, merge and recovery tools") { navigate("backup") } }
         item { PowerLink(Icons.Default.Lock, "Privacy & app lock", if (configured) "App lock enabled" else "PIN, device authentication and private previews") { navigate("privacy") } }
         item { SettingToggle("Private previews", "Hide personal text in screenshots and recent apps", prefs.privatePreview) { model.setting("private_preview", it) } }
