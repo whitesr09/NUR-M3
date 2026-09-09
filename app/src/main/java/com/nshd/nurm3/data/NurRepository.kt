@@ -30,12 +30,12 @@ class NurRepository(private val dao: NurDao) {
         saveNew(Entry(UUID.randomUUID().toString(), kind, title.trim(), position, System.currentTimeMillis(), startDate = date.toString()))
     }
 
-    suspend fun saveNew(entry: Entry) {
-        if (!valid(entry)) return
+    suspend fun saveNew(entry: Entry): Boolean {
+        if (!valid(entry)) return false
         dao.saveEntry(entry.copy(id = UUID.randomUUID().toString(), title = entry.title.trim(), archived = false, createdAt = System.currentTimeMillis()))
+        return true
     }
 
-    /** Returns false when the entry cannot be completed on the selected day. */
     suspend fun setCompleted(id: String, date: LocalDate, completed: Boolean): Boolean {
         val entry = dao.getEntry(id) ?: return false
         if (!EntrySchedule.isActive(entry, date)) return false
@@ -43,12 +43,26 @@ class NurRepository(private val dao: NurDao) {
         return true
     }
 
-    suspend fun updateEntry(entry: Entry) {
-        if (!valid(entry)) return
-        val existing = dao.getEntry(entry.id) ?: return
-        if (existing.kind != entry.kind || existing.archived) return
+    suspend fun updateEntry(entry: Entry): Boolean {
+        if (!valid(entry)) return false
+        val existing = dao.getEntry(entry.id) ?: return false
+        if (existing.kind != entry.kind || existing.archived) return false
         dao.saveEntry(entry.copy(title = entry.title.trim(), position = existing.position, createdAt = existing.createdAt, archived = existing.archived))
+        return true
     }
 
-    suspend fun delete(id: String) = dao.deleteEntry(id)
+    /** Archive keeps every dated completion. Prayer definitions cannot be archived. */
+    suspend fun delete(id: String): Boolean {
+        val entry = dao.getEntry(id) ?: return false
+        if (entry.kind == NurKind.PRAYER || entry.archived) return false
+        dao.deleteEntry(id)
+        return true
+    }
+
+    suspend fun restore(id: String): Boolean {
+        val entry = dao.getEntry(id) ?: return false
+        if (entry.kind == NurKind.PRAYER || !entry.archived) return false
+        dao.saveEntry(entry.copy(archived = false))
+        return true
+    }
 }
