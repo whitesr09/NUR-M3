@@ -103,7 +103,7 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
     val activity = androidx.compose.ui.platform.LocalContext.current as MainActivity
     val nav = rememberNavController()
     val current = nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey"
-    val auxiliary = setOf("settings", "appearance", "layout", "insights", "backup", "privacy", "reflections?verse={verse}")
+    val auxiliary = setOf("settings", "appearance", "layout", "insights", "backup", "privacy", "dhikr", "reflections?verse={verse}")
     SideEffect {
         if (locked || prefs.privatePreview) activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -136,6 +136,7 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
                                     "insights" -> "Insights"
                                     "backup" -> "Backup & restore"
                                     "privacy" -> "Privacy"
+                                    "dhikr" -> "Dhikr"
                                     "reflections?verse={verse}" -> "Quran Reflections"
                                     else -> tabs.firstOrNull { it.route == current }?.label ?: "NUR"
                                 }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
@@ -164,6 +165,7 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
                     composable("insights") { InsightsScreen(allEntries, completions, today) }
                     composable("backup") { BackupScreen() }
                     composable("privacy") { PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) } }
+                    composable("dhikr") { DhikrScreen(model, prefs, today) }
                     composable("reflections?verse={verse}", arguments = listOf(androidx.navigation.navArgument("verse") { type = androidx.navigation.NavType.StringType; defaultValue = "" })) { entry ->
                         ReflectionScreen(entry.arguments?.getString("verse"))
                     }
