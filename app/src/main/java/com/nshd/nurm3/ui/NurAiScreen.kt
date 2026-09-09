@@ -14,11 +14,12 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import com.nshd.nurm3.NurViewModel
 import com.nshd.nurm3.ai.*
 import com.nshd.nurm3.data.NurPreferences
-import com.nshd.nurm3.NurViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -36,6 +37,8 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
     var keyInput by remember { mutableStateOf("") }
     var modelInput by remember { mutableStateOf(repo.model()) }
     var selectedModel by remember { mutableStateOf(repo.model()) }
+    var resolvedModel by remember { mutableStateOf("") }
+    var availableModels by remember { mutableStateOf<List<AiModelOption>>(emptyList()) }
     var hasKey by remember { mutableStateOf(repo.hasKey()) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
@@ -53,18 +56,33 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column {
-                Text("NUR AI", style = MaterialTheme.typography.headlineSmall)
-                Text(selectedModel, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("NUR AI", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                Text(
+                    when {
+                        resolvedModel.isNotBlank() -> "Connected · $resolvedModel"
+                        selectedModel == NurAiRepository.AUTO_MODEL -> "Automatic Gemini model"
+                        else -> selectedModel
+                    },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             IconButton(onClick = { settingsOpen = !settingsOpen }) { Icon(Icons.Default.Settings, "AI settings") }
         }
 
         if (settingsOpen || !prefs.nurAiEnabled || !hasKey) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Optional Gemini companion", style = MaterialTheme.typography.titleMedium)
-                Text("Messages are sent to Google only when you submit them with network access enabled. Your API key, selected model and local chat history stay in NUR's private encrypted store and are excluded from backups. Google's API data and billing policies still apply.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Gemini connection", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "NUR AI now supports automatic model discovery. In Auto mode it asks Gemini which chat model your key can actually use, so retired model names no longer block the conversation.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 NurSettingRow("Enable NUR AI network access", "Allow explicit chat requests to Gemini", prefs.nurAiEnabled) { model.setting("nur_ai", it) }
 
                 OutlinedTextField(
@@ -75,14 +93,43 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
                     visualTransformation = PasswordVisualTransformation(),
                     singleLine = true
                 )
-                OutlinedButton(
+                Button(
                     onClick = {
-                        runCatching { repo.saveKey(keyInput.trim()); keyInput = ""; hasKey = true; error = "API key saved in private storage." }
-                            .onFailure { error = "Could not save the API key." }
+                        runCatching {
+                            repo.saveKey(keyInput.trim())
+                            keyInput = ""
+                            hasKey = true
+                            availableModels = emptyList()
+                            resolvedModel = ""
+                            error = "API key saved securely on this device."
+                        }.onFailure { error = "Could not save the API key." }
                     },
                     enabled = keyInput.isNotBlank() && !busy,
                     modifier = Modifier.fillMaxWidth()
-                ) { Text("Save API key") }
+                ) { Icon(Icons.Default.Key, null); Spacer(Modifier.width(8.dp)); Text("Save API key") }
+
+                OutlinedButton(
+                    onClick = {
+                        scope.launch {
+                            busy = true
+                            error = ""
+                            try {
+                                val found = repo.discoverModels(prefs.nurAiEnabled)
+                                availableModels = found
+                                if (found.isEmpty()) error = "The key connected, but no compatible Gemini chat model was returned."
+                                else error = "Connection ready · ${found.size} compatible Gemini model${if (found.size == 1) "" else "s"} found."
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (failure: Exception) {
+                                error = failure.message ?: "Could not test the Gemini connection."
+                            } finally {
+                                busy = false
+                            }
+                        }
+                    },
+                    enabled = hasKey && prefs.nurAiEnabled && !busy,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Icon(Icons.Default.WifiTethering, null); Spacer(Modifier.width(8.dp)); Text("Test connection & find models") }
                 TextButton(onClick = { clearDialog = "key" }, enabled = hasKey && !busy) { Text("Remove saved API key") }
 
                 HorizontalDivider()
@@ -91,36 +138,48 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
                     modelInput,
                     { modelInput = it.take(80) },
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Gemini model ID") },
-                    supportingText = { Text("Default: ${NurAiRepository.DEFAULT_MODEL}. Availability and quota depend on your Google project.") },
+                    label = { Text("Gemini model") },
+                    supportingText = { Text("Recommended: Auto. NUR discovers a compatible model at send time and retries if a selected model has been retired.") },
                     singleLine = true,
                     enabled = !busy
                 )
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     NurAiRepository.MODEL_PRESETS.forEach { preset ->
-                        AssistChip(onClick = { modelInput = preset }, label = { Text(preset) }, leadingIcon = if (modelInput == preset) ({ Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }) else null)
+                        AssistChip(
+                            onClick = { modelInput = preset },
+                            label = { Text(if (preset == NurAiRepository.AUTO_MODEL) "Auto" else preset) },
+                            leadingIcon = if (modelInput == preset) ({ Icon(Icons.Default.Check, null, Modifier.size(16.dp)) }) else null
+                        )
+                    }
+                }
+                if (availableModels.isNotEmpty()) {
+                    Text("Available to this key", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        availableModels.take(8).forEach { option ->
+                            SuggestionChip(onClick = { modelInput = option.id }, label = { Text(option.id) })
+                        }
                     }
                 }
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { modelInput = NurAiRepository.DEFAULT_MODEL }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Default") }
+                    OutlinedButton(onClick = { modelInput = NurAiRepository.AUTO_MODEL }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Use Auto") }
                     Button(onClick = {
                         runCatching {
                             repo.saveModel(modelInput)
                             selectedModel = repo.model()
                             modelInput = selectedModel
-                            error = "Model setting saved."
+                            resolvedModel = ""
+                            error = if (selectedModel == NurAiRepository.AUTO_MODEL) "Automatic model selection enabled." else "Model preference saved."
                         }.onFailure { error = it.message ?: "Invalid model ID." }
-                    }, enabled = !busy && NurAiRepository.validModel(modelInput.trim()), modifier = Modifier.weight(1f)) { Text("Save model") }
+                    }, enabled = !busy && NurAiRepository.validModel(modelInput.trim()), modifier = Modifier.weight(1f)) { Text("Save") }
                 }
 
                 NurSettingRow("Web grounding", "Optional source retrieval may use extra API quota. Off by default.", grounding) { grounding = it }
-                Text("Grounded links appear only when Gemini actually returns retrieval metadata. NUR does not fabricate source citations.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("Create or review your key in Google AI Studio. Never share it in chat or commit it to GitHub.", style = MaterialTheme.typography.bodySmall)
+                Text("Grounded links appear only when Gemini returns retrieval metadata. NUR never invents source links.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedButton(onClick = {
                     try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/apikey"))) }
                     catch (_: ActivityNotFoundException) { error = "No browser is available." }
                     catch (_: SecurityException) { error = "The browser could not be opened." }
-                }) { Text("Open Google AI Studio") }
+                }) { Icon(Icons.Default.OpenInNew, null); Spacer(Modifier.width(8.dp)); Text("Open Google AI Studio") }
                 TextButton(onClick = { clearDialog = "history" }, enabled = !busy) { Text("Clear chat history") }
                 TextButton(onClick = { clearDialog = "all" }, enabled = !busy) { Text("Clear all AI data") }
                 HorizontalDivider()
@@ -129,7 +188,7 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
 
         if (messages.isEmpty()) {
             Column(Modifier.weight(1f).padding(24.dp), verticalArrangement = Arrangement.Center) {
-                NurEmptyState(Icons.Default.AutoAwesome, "Ask with curiosity", "Explore Islamic learning, plan a routine, or reflect on a goal. AI answers can be mistaken and are not verified religious rulings.")
+                NurEmptyState(Icons.Default.AutoAwesome, "Ask with curiosity", "Explore Islamic learning, plan a routine, or reflect on a goal. NUR AI answers can be mistaken and are not verified religious rulings.")
             }
         } else {
             LazyColumn(Modifier.weight(1f), state = listState, contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -139,7 +198,7 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
                         if (message.id == streamingId && message.text.isBlank()) {
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
-                                Text("Waiting for Gemini…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("Connecting to Gemini…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         } else Text(message.text, style = MaterialTheme.typography.bodyMedium)
                         if (message.id == streamingId && message.text.isNotBlank()) Text("Streaming…", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -148,7 +207,7 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
                 if (sources.isNotEmpty()) item {
                     NurPanel(Modifier.fillMaxWidth()) {
                         Text("Retrieved sources", style = MaterialTheme.typography.titleSmall)
-                        Text("These links came from Gemini grounding metadata. Review the original context and attribution before relying on them.", style = MaterialTheme.typography.bodySmall)
+                        Text("These links came from Gemini grounding metadata. Review the original context before relying on them.", style = MaterialTheme.typography.bodySmall)
                         sources.forEach { source ->
                             TextButton(onClick = {
                                 try { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(source.url))) }
@@ -167,9 +226,9 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
             Text("AI can make mistakes. Verify Quran/Hadith references and consult a qualified scholar for personal rulings.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(input, { input = it.take(8000) }, modifier = Modifier.weight(1f), placeholder = { Text("Ask NUR AI…") }, maxLines = 4, enabled = !busy)
-                IconButton(onClick = {
+                FilledIconButton(onClick = {
                     val text = input.trim()
-                    if (text.isBlank() || busy) return@IconButton
+                    if (text.isBlank() || busy) return@FilledIconButton
                     input = ""
                     error = ""
                     sources = emptyList()
@@ -182,12 +241,11 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
                     scope.launch {
                         try {
                             val reply = repo.sendStreaming(request, prefs.nurAiEnabled, grounding) { partial ->
-                                withContext(Dispatchers.Main.immediate) {
-                                    messages = request + draft.copy(text = partial)
-                                }
+                                withContext(Dispatchers.Main.immediate) { messages = request + draft.copy(text = partial) }
                             }
                             messages = request + draft.copy(text = reply.text)
                             sources = reply.sources
+                            resolvedModel = reply.model
                             repo.saveHistory(messages)
                         } catch (cancelled: CancellationException) {
                             messages = request
@@ -215,13 +273,15 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
         }) },
         confirmButton = { TextButton(onClick = {
             when (clearDialog) {
-                "key" -> { repo.clearKey(); hasKey = false }
+                "key" -> { repo.clearKey(); hasKey = false; availableModels = emptyList(); resolvedModel = "" }
                 "history" -> { repo.clearHistory(); messages = emptyList(); sources = emptyList() }
                 else -> {
                     repo.clearAll()
                     hasKey = false
                     messages = emptyList()
                     sources = emptyList()
+                    availableModels = emptyList()
+                    resolvedModel = ""
                     selectedModel = repo.model()
                     modelInput = selectedModel
                     model.setting("nur_ai", false)
