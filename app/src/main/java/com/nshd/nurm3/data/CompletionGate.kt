@@ -7,7 +7,8 @@ class CompletionGate {
     private val active = mutableSetOf<String>()
 
     companion object {
-        fun key(id: String, date: LocalDate): String = "$id|$date"
+        /** Length-prefixing keeps arbitrary imported identifiers from colliding. */
+        fun key(id: String, date: LocalDate): String = "${id.length}:$id|$date"
     }
 
     @Synchronized
