@@ -18,6 +18,7 @@ private val Night = Color(0xFF0B131B)
 private val NightSurface = Color(0xFF111C25)
 private val Light = Color(0xFFF7F7F4)
 val LocalNurCompact = staticCompositionLocalOf { false }
+val LocalNurProgressStyle = staticCompositionLocalOf { "slim" }
 
 private fun paletteColor(name: String, dark: Boolean): Color = when (name) {
     "ocean" -> if (dark) Color(0xFFA9CEE8) else Color(0xFF315D78)
@@ -44,6 +45,16 @@ private fun typography(scale: Float): Typography {
     )
 }
 
+/** AMOLED is a separate, genuinely black surface scheme, not merely a dark accent. */
+private fun amoledScheme(base: ColorScheme): ColorScheme = base.copy(
+    background = Color.Black, surface = Color.Black, surfaceTint = Color.Black,
+    surfaceContainerLowest = Color.Black, surfaceContainerLow = Color.Black,
+    surfaceContainer = Color.Black, surfaceContainerHigh = Color(0xFF101010),
+    surfaceContainerHighest = Color(0xFF181818), surfaceVariant = Color(0xFF191919),
+    onBackground = Color(0xFFE8EDF0), onSurface = Color(0xFFE8EDF0),
+    onSurfaceVariant = Color(0xFFB1BEC6), outlineVariant = Color(0xFF383838)
+)
+
 @Composable
 fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
     val context = LocalContext.current
@@ -54,18 +65,23 @@ fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
     }
     val primary = paletteColor(prefs.palette, dark)
     val scheme = when {
-        prefs.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ->
-            if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        dark -> darkColorScheme(
-            primary = primary, onPrimary = Night, primaryContainer = Color(0xFF40341F), onPrimaryContainer = Color(0xFFF7E5B7),
-            secondary = Color(0xFFB5C8D2), onSecondary = Night, secondaryContainer = Color(0xFF263844), onSecondaryContainer = Color(0xFFD9E5EB),
-            tertiary = Color(0xFFB8CBBF), onTertiary = Night,
-            background = Night, onBackground = Color(0xFFE8EDF0), surface = NightSurface, onSurface = Color(0xFFE8EDF0),
-            surfaceVariant = Color(0xFF263640), onSurfaceVariant = Color(0xFFB1BEC6),
-            surfaceContainerLowest = Night, surfaceContainerLow = Color(0xFF15212A), surfaceContainer = Color(0xFF1B2832),
-            surfaceContainerHigh = Color(0xFF23323C), surfaceContainerHighest = Color(0xFF2B3B46),
-            outline = Color(0xFF81909A), outlineVariant = Color(0xFF354650), surfaceTint = primary
-        )
+        prefs.dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+            val base = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (prefs.themeMode == "amoled") amoledScheme(base) else base
+        }
+        dark -> {
+            val base = darkColorScheme(
+                primary = primary, onPrimary = Night, primaryContainer = Color(0xFF40341F), onPrimaryContainer = Color(0xFFF7E5B7),
+                secondary = Color(0xFFB5C8D2), onSecondary = Night, secondaryContainer = Color(0xFF263844), onSecondaryContainer = Color(0xFFD9E5EB),
+                tertiary = Color(0xFFB8CBBF), onTertiary = Night,
+                background = Night, onBackground = Color(0xFFE8EDF0), surface = NightSurface, onSurface = Color(0xFFE8EDF0),
+                surfaceVariant = Color(0xFF263640), onSurfaceVariant = Color(0xFFB1BEC6),
+                surfaceContainerLowest = Night, surfaceContainerLow = Color(0xFF15212A), surfaceContainer = Color(0xFF1B2832),
+                surfaceContainerHigh = Color(0xFF23323C), surfaceContainerHighest = Color(0xFF2B3B46),
+                outline = Color(0xFF81909A), outlineVariant = Color(0xFF354650), surfaceTint = primary
+            )
+            if (prefs.themeMode == "amoled") amoledScheme(base) else base
+        }
         else -> lightColorScheme(
             primary = primary, onPrimary = Color.White, primaryContainer = Color(0xFFF3E8CC), onPrimaryContainer = Color(0xFF4B370B),
             secondary = Color(0xFF57666E), onSecondary = Color.White, secondaryContainer = Color(0xFFE3EAED), onSecondaryContainer = Color(0xFF283942),
@@ -92,7 +108,8 @@ fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
     )
     CompositionLocalProvider(
         LocalNurCompact provides prefs.compactCards,
-        LocalNurReduceMotion provides prefs.reduceMotion
+        LocalNurReduceMotion provides prefs.reduceMotion,
+        LocalNurProgressStyle provides prefs.progressStyle
     ) {
         MaterialTheme(colorScheme = scheme, typography = typography(prefs.typeScale), shapes = shapes, content = content)
     }

@@ -77,7 +77,6 @@ fun DailyJourneyScreen(entries: List<Entry>, completions: List<Completion>, toda
 private fun DailyLightCard(summary: ProgressSummary, prayersDone: Int, today: LocalDate, prefs: NurPreferences) {
     val target = NurMotion.fraction(summary.fraction)
     val progress = rememberNurProgress(target, today, "Daily Light")
-    val outer = rememberNurProgress(prayersDone / 5f, today, "Daily Light prayers")
     val scheme = MaterialTheme.colorScheme
     NurPanel(Modifier.fillMaxWidth()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -93,8 +92,8 @@ private fun DailyLightCard(summary: ProgressSummary, prayersDone: Int, today: Lo
                 contentDescription = "Daily Light: ${summary.completed} of ${summary.total} completed. $prayersDone of 5 prayers."
                 progressBarRangeInfo = ProgressBarRangeInfo(target, 0f..1f)
             }, contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(progress = { outer }, modifier = Modifier.size(194.dp), strokeWidth = 3.dp, color = scheme.primary.copy(alpha = 0.7f), trackColor = scheme.surfaceVariant.copy(alpha = 0.45f))
-                CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(158.dp), strokeWidth = 10.dp, color = scheme.primary, trackColor = scheme.surfaceVariant.copy(alpha = 0.65f))
+                NurCircularProgress(prayersDone / 5f, today, "Prayer ring", modifier = Modifier.size(194.dp), strokeWidth = 3.dp, color = scheme.primary.copy(alpha = 0.7f), trackColor = scheme.surfaceVariant.copy(alpha = 0.45f))
+                NurCircularProgress(target, today, "Daily Light ring", modifier = Modifier.size(158.dp), strokeWidth = 10.dp, color = scheme.primary, trackColor = scheme.surfaceVariant.copy(alpha = 0.65f))
                 listOf(Alignment.TopCenter, Alignment.BottomCenter, Alignment.CenterStart, Alignment.CenterEnd).forEach { alignment ->
                     Box(Modifier.fillMaxSize(), contentAlignment = alignment) {
                         Icon(Icons.Default.Star, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))

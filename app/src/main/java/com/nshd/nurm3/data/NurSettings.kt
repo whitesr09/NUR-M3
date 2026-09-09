@@ -27,7 +27,9 @@ data class NurPreferences(
     val widgetsEnabled: Boolean = true,
     val companionModules: Boolean = false,
     val nurAiEnabled: Boolean = false,
-    val dhikrHaptics: Boolean = true
+    val dhikrHaptics: Boolean = true,
+    val progressStyle: String = "slim",
+    val highRefreshRate: Boolean = false
 )
 
 class NurSettings(private val context: Context) {
@@ -50,19 +52,21 @@ class NurSettings(private val context: Context) {
     private val companionModules = booleanPreferencesKey("companion_modules")
     private val nurAiEnabled = booleanPreferencesKey("nur_ai_enabled")
     private val dhikrHaptics = booleanPreferencesKey("dhikr_haptics")
+    private val progressStyle = stringPreferencesKey("progress_style")
+    private val highRefreshRate = booleanPreferencesKey("high_refresh_rate")
 
     val preferences: Flow<NurPreferences> = context.nurDataStore.data.map { p ->
-        val selectedMode = p[mode] ?: if (p[dark] ?: true) "dark" else "light"
-        val selectedPalette = p[palette] ?: if (p[gold] ?: true) "gold" else "ocean"
+        val selectedMode = AppearanceChoices.mode(p[mode] ?: if (p[dark] ?: true) "dark" else "light")
+        val selectedPalette = p[palette]?.takeIf { it in setOf("gold", "ocean", "sage", "rose") } ?: if (p[gold] ?: true) "gold" else "ocean"
         NurPreferences(
-            darkMode = selectedMode != "light",
+            darkMode = selectedMode == "dark" || selectedMode == "amoled" || selectedMode == "system" && (p[dark] ?: true),
             dynamicColor = p[dynamic] ?: false,
             goldAccent = selectedPalette == "gold",
             reduceMotion = p[motion] ?: false,
             showArabic = p[arabic] ?: true,
             themeMode = selectedMode,
             palette = selectedPalette,
-            typeScale = (p[scale] ?: 1f).coerceIn(0.85f, 1.2f),
+            typeScale = (p[scale] ?: 1f).takeIf { it.isFinite() }?.coerceIn(0.85f, 1.2f) ?: 1f,
             compactCards = p[compact] ?: false,
             softShapes = p[shapes] ?: true,
             journey = JourneyLayout.restore(p[order], p[hidden]),
@@ -72,7 +76,9 @@ class NurSettings(private val context: Context) {
             widgetsEnabled = p[widgetsEnabled] ?: true,
             companionModules = p[companionModules] ?: false,
             nurAiEnabled = p[nurAiEnabled] ?: false,
-            dhikrHaptics = p[dhikrHaptics] ?: true
+            dhikrHaptics = p[dhikrHaptics] ?: true,
+            progressStyle = AppearanceChoices.progress(p[progressStyle]),
+            highRefreshRate = p[highRefreshRate] ?: false
         )
     }
 
@@ -93,6 +99,7 @@ class NurSettings(private val context: Context) {
                 "companion_modules" -> p[companionModules] = value
                 "nur_ai" -> p[nurAiEnabled] = value
                 "dhikr_haptics" -> p[dhikrHaptics] = value
+                "high_refresh_rate" -> p[highRefreshRate] = value
             }
         }
     }
@@ -100,18 +107,19 @@ class NurSettings(private val context: Context) {
     suspend fun updateChoice(key: String, value: String) {
         context.nurDataStore.edit { p ->
             when (key) {
-                "mode" -> if (value in listOf("system", "light", "dark")) {
+                "mode" -> if (value in AppearanceChoices.modes) {
                     p[mode] = value; p[dark] = value != "light"
                 }
                 "palette" -> if (value in listOf("gold", "ocean", "sage", "rose")) {
                     p[palette] = value; p[gold] = value == "gold"
                 }
+                "progress_style" -> if (value in AppearanceChoices.progressStyles) p[progressStyle] = value
             }
         }
     }
 
     suspend fun updateScale(value: Float) {
-        context.nurDataStore.edit { it[scale] = value.coerceIn(0.85f, 1.2f) }
+        context.nurDataStore.edit { it[scale] = if (value.isFinite()) value.coerceIn(0.85f, 1.2f) else 1f }
     }
 
     suspend fun saveJourney(layout: JourneyLayout) {
@@ -123,8 +131,8 @@ class NurSettings(private val context: Context) {
 
     suspend fun resetAppearance() {
         context.nurDataStore.edit { p ->
-            listOf(dark, dynamic, gold, motion, arabic, compact, shapes).forEach { p.remove(it) }
-            listOf(mode, palette, order, hidden).forEach { p.remove(it) }
+            listOf(dark, dynamic, gold, motion, arabic, compact, shapes, highRefreshRate).forEach { p.remove(it) }
+            listOf(mode, palette, order, hidden, progressStyle).forEach { p.remove(it) }
             p.remove(scale)
         }
     }

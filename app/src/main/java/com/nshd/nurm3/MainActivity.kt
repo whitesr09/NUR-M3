@@ -34,6 +34,7 @@ class MainActivity : ComponentActivity() {
     private val model: NurViewModel by viewModels()
     private val privateStore by lazy { NurPrivateStore(this) }
     private val lock by lazy { NurLock(privateStore) }
+    val refreshController by lazy { NurRefreshController(window, this) }
     private var authResult: ((Boolean, String) -> Unit)? = null
     private val credentialLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = authResult
@@ -75,6 +76,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        lifecycle.addObserver(refreshController)
         setContent { NurApp(model, lock, ::authenticateDevice) }
     }
     override fun onResume() { super.onResume(); model.refreshDate() }
@@ -91,6 +93,7 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
     val today by model.today.collectAsStateWithLifecycle()
     val locked by lock.locked.collectAsStateWithLifecycle()
     val activity = androidx.compose.ui.platform.LocalContext.current as MainActivity
+    val refreshStatus by activity.refreshController.status.collectAsStateWithLifecycle()
     val nav = rememberNavController()
     val current = nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey"
     val snackbar = remember { SnackbarHostState() }
@@ -98,6 +101,9 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
         "light" -> false
         "system" -> isSystemInDarkTheme()
         else -> true
+    }
+    LaunchedEffect(prefs.highRefreshRate, locked) {
+        activity.refreshController.setEnabled(prefs.highRefreshRate && !locked)
     }
     SideEffect {
         if (locked || prefs.privatePreview) activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -143,7 +149,7 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
                         composable("rhythm") { EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model) }
                         composable("history") { HistoryScreen(allEntries, completions) }
                         composable("settings") { PowerSettingsScreen(prefs, model, navigate, lock) }
-                        composable("appearance") { AppearanceStudio(prefs, model) }
+                        composable("appearance") { AppearanceStudio(prefs, model, refreshStatus) }
                         composable("layout") { JourneyStudio(prefs.journey, model) }
                         composable("insights") { InsightsScreen(allEntries, completions, today) }
                         composable("backup") { BackupScreen() }
