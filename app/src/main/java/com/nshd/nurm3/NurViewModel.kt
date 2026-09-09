@@ -53,7 +53,7 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Persist first; the database flow is the only authority for a checked state. */
     fun complete(id: String, date: LocalDate, checked: Boolean) {
-        val key = completionGate.key(id, date)
+        val key = CompletionGate.key(id, date)
         if (!completionGate.acquire(key)) return
         _completionPending.update { it + key }
         viewModelScope.launch {
