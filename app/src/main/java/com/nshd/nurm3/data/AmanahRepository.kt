@@ -22,14 +22,33 @@ class AmanahRepository(private val extras: NurExtrasDatabase, private val origin
         return true
     }
 
+    suspend fun createTask(title: String, date: LocalDate, details: TaskDetails? = null, children: List<String> = emptyList()): String {
+        require(title.isNotBlank() && title.length <= 200 && children.size <= 100)
+        require(children.all { it.isNotBlank() && it.length <= 200 })
+        val id = UUID.randomUUID().toString()
+        val position = (original.dao().getAllEntries().maxOfOrNull { it.position } ?: -1) + 1
+        val parent = Entry(id, NurKind.AMANAH, title.trim(), position, System.currentTimeMillis(), startDate = date.toString())
+        check(original.dao().insertEntryIgnoringConflict(parent) != -1L) { "Could not create task" }
+        extras.withTransaction {
+            if (details != null) {
+                require(details.priority in 1..3 && details.category.length <= 80 && details.notes.length <= 10_000)
+                dao.saveTaskDetails(details.copy(entryId = id, updatedAt = System.currentTimeMillis()))
+            }
+            children.forEachIndexed { index, child -> dao.saveSubtask(Subtask(UUID.randomUUID().toString(), id, child.trim(), index)) }
+        }
+        return id
+    }
+
     suspend fun addSubtask(entryId: String, title: String): Boolean {
         val parent = original.dao().getEntry(entryId) ?: return false
         if (parent.kind != NurKind.AMANAH || parent.archived) return false
         require(title.isNotBlank() && title.length <= 200)
-        val rows = dao.allSubtasks(entryId)
-        require(rows.count { !it.archived } < 100) { "Maximum 100 active subtasks" }
-        dao.saveSubtask(Subtask(UUID.randomUUID().toString(), entryId, title.trim(), (rows.maxOfOrNull { it.position } ?: -1) + 1))
-        return true
+        return extras.withTransaction {
+            val rows = dao.allSubtasks(entryId)
+            require(rows.count { !it.archived } < 100) { "Maximum 100 active subtasks" }
+            dao.saveSubtask(Subtask(UUID.randomUUID().toString(), entryId, title.trim(), (rows.maxOfOrNull { it.position } ?: -1) + 1))
+            true
+        }
     }
 
     suspend fun updateSubtask(id: String, title: String): Boolean {
@@ -69,18 +88,7 @@ class AmanahRepository(private val extras: NurExtrasDatabase, private val origin
         val template = dao.template(templateId) ?: return null
         val children = JSONArray(template.subtasksJson)
         require(children.length() <= 100)
-        val parent = Entry(UUID.randomUUID().toString(), NurKind.AMANAH, template.title, 0, System.currentTimeMillis(), startDate = date.toString())
-        val saved = NurRepository(original.dao()).saveNew(parent)
-        if (!saved) return null
-        // saveNew generates its own stable ID; use the newly inserted row's identity instead.
-        val created = original.dao().getAllEntries().filter { it.kind == NurKind.AMANAH && it.createdAt >= parent.createdAt }.maxByOrNull { it.createdAt } ?: return null
-        extras.withTransaction {
-            dao.saveTaskDetails(TaskDetails(created.id, template.priority, template.category, template.notes))
-            for (i in 0 until children.length()) {
-                val title = children.getString(i)
-                if (title.isNotBlank() && title.length <= 200) dao.saveSubtask(Subtask(UUID.randomUUID().toString(), created.id, title, i))
-            }
-        }
-        return created.id
+        val titles = (0 until children.length()).map { children.getString(it) }
+        return createTask(template.title, date, TaskDetails("", template.priority, template.category, template.notes), titles)
     }
 }
