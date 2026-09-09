@@ -14,33 +14,40 @@ Added a six-passage offline catalog, search and reading screen, references, redu
 
 ## Level 0.7: Daily Light reflection integration — source committed, unverified
 
-- Connected the existing prayer + Amanah + Muhasaba progress helper to the actual Daily Journey screen. Rhythm and reading never inflate Daily Light.
-- Added a dated reflection carousel with 10-second optional playback, previous/next controls, pause, and a direct Read action.
-- The timer runs only while the relevant screen is resumed. Automatic playback is opt-in, so reading does not unexpectedly advance. Reduced motion replaces crossfades with direct updates.
-- Added a reader route with an optional verse identifier. A selected passage opens expanded and scrolls into view; the Settings route remains compatible.
-- Added pure tests for progress eligibility, previous-day isolation, and deterministic reflection selection.
-- No database schema, signing configuration, package ID, or existing user data was changed.
-
-Compilation, unit tests, source-text verification, signing and device testing have not yet been performed for this level. The source is not release-ready.
+Connected the prayer + Amanah + Muhasaba progress helper to Journey, excluding Rhythm. Added a dated reflection carousel with opt-in 10-second playback, pause, previous/next and direct reading. Playback is lifecycle-aware; reduced motion is respected. Added a reader route with an optional verse ID and source-only tests. No database or signing change.
 
 ## Level 0.8: offline Dhikr counter — source committed, unverified
 
-- Added a dedicated counter screen with a large touch target, independently animated progress ring, personal target, session count, today's actual count and lifetime total.
-- Added three editable starter phrases, custom phrases and user-defined targets from 1 to 100,000. These are personal counting aids, not religious prescriptions or promises of reward.
-- Added optional saved haptic feedback, reduced-motion compatibility, confirmation before resetting a session, archive and restore controls, and an accessible route through Settings.
-- Added Room version 3 with separate Dhikr phrase and dated-count tables. Explicit migration 2-to-3 retains the existing 1-to-2 chain. No destructive migration, package change or signing change.
-- Counting is transactional. Session resets do not clear daily/lifetime history; archived phrases retain records. A new local date receives its own count without deleting earlier dates.
-- Used Room Upsert rather than REPLACE for phrase edits to prevent foreign-key cascades from deleting dated history.
-- Extended JSON backup format to version 3, including phrases, session counts and dated records. Versions 1 and 2 remain readable. Replacing from an older backup preserves current Dhikr data instead of erasing a module absent from that backup.
-- Merge retains local records on identifier/date conflicts and does not add counts together. Replacement writes a recovery snapshot before changing data, with the snapshot and database replacement serialized in one transaction.
-- Added pure counter and backup tests plus Android instrumentation tests for persistence, session reset, archive/restore and the Room 2-to-3 migration.
+Added an offline counter with editable personal goals, separate session/today/lifetime counts, optional haptics, confirmation, archive/restore and dated history. Added Room version 3 and explicit 2-to-3 migration, preserving the 1-to-2 chain. Added version 3 backups with Dhikr records and backward-compatible restore behavior. Room Upsert protects dated records from replacement cascades. Added pure and instrumentation tests, not yet executed.
+
+## Level 0.9: professional UI and interaction foundation — source committed, unverified
+
+The user requested a substantial visual and usability improvement, especially for checkboxes and everyday interactions. This level prioritizes that foundation rather than adding another untested companion module.
+
+### Implemented in source
+
+- Introduced custom NUR design primitives, a restrained black-blue/gold palette, a warm light theme, consistent typography, subtle borders, compact spacing and shape preferences. Existing dynamic palettes remain optional.
+- Replaced the stock bottom navigation with a compact custom five-destination bar and branded app header. Added edge-to-edge system-bar handling, theme-aware icon contrast and a full Arabic header that can wrap on narrow screens.
+- Replaced standard checklist controls with a custom animated check mark and a large semantic row target. Full-row tapping, ripple/press feedback, separate overflow actions, disabled/saving states and reduced-motion support are shared across prayer, Amanah, Muhasaba and Rhythm lists.
+- Added per-entry/date completion request gating. The stored Room completion remains authoritative; overlapping taps are rejected, save failures are surfaced through the root snackbar, and a midnight date change cannot silently save into the previous day.
+- Rebuilt Daily Journey with consistent surfaces, improved hierarchy, refined concentric rings, four markers, slim progress bars, readable counts and quick access to Quran and Dhikr. The established Daily Light denominator remains unchanged.
+- Rebuilt task/habit list layouts with search, Today/To do/Completed filters, responsive empty states, an overflow menu, archived-entry management and reversible archive actions. The editor now has a scrollable form, wrapped recurrence choices, accessible day selection, a keyboard-aware action area, validation, save-in-progress feedback and an unsaved-changes confirmation. It waits for the actual save result before closing.
+- Reworked genuine History into expandable dated groups with preserved title snapshots and completion timestamps.
+- Restyled Appearance Studio, its live interactive preview, palette choices, theme choices, typography controls, setting toggles and Journey Studio. Settings destinations now share a consistent visual hierarchy. The last visible Journey card cannot be hidden, and an invalid saved layout recovers without discarding its order.
+- Added shared root snackbar access for archive Undo and save-error feedback. Added completion-gate and Journey-layout regression tests to the source tree.
+
+### Scope and remaining visual work
+
+This is a substantial core-interface pass, not a claim that every feature screen is finished. Dhikr, Quran reader, privacy, backup and other companion-specific screens still need their own detailed layout/accessibility passes, shared component adoption and final device review. Existing working data and feature logic should be preserved during those passes.
 
 ### Deferred verification
 
-No APK build, Gradle compilation, unit-test execution, instrumentation run or device installation was performed for level 0.8. Room schema generation and migration validation, full backup restore regression testing, responsive layout review and final signing checks remain release gates. The existing versionCode and stable development signing identity are unchanged. This is development source, not a verified installable release.
+No APK build, Gradle compilation, unit-test execution, instrumentation run or device installation was performed for level 0.9. The new source and tests are not yet verified as compiling. Final integration must check the complete source graph, Room migrations 1-to-2-to-3, backup versions 1/2/3, archive/restore and checkbox races, large text and 320dp layouts, edge-to-edge/keyboard behavior, reduced motion, TalkBack semantics and signing compatibility. New code must not be called release-ready merely because it is committed.
+
+The application ID, existing versionCode, stable development signing identity, Room version 3 and backup version 3 were not changed by this level. Do not uninstall an existing installation to work around migration or signing errors. A production signing key must remain owner-controlled and private.
 
 ## Remaining levels
 
-Continue with verified Islamic content and Hadith review, optional NUR AI, notification scheduling, accessibility/localization, privacy and backup hardening, widget behavior, advanced productivity tools and final integration. Inspect existing implementations before changes to avoid duplicating working features. Each level receives separate source commits and review.
+Continue focused visual polish, verified Islamic content and Hadith review, optional NUR AI, notification scheduling, accessibility/localization, privacy and backup hardening, widget behavior, advanced productivity tools and final integration. Inspect existing implementations before changes to avoid duplicating working features. Each level receives separate source commits and review.
 
-The final build gate includes compilation, unit tests, migration and backup-restore tests, APK signing verification, and installation testing. Existing user data must not be erased to work around a signing or migration problem. No feature is considered release-ready merely because source has been committed.
+The final build gate includes compilation, unit tests, migration and backup-restore tests, APK signing verification and installation testing. Existing user data must not be erased to work around a signing or migration problem. No feature is considered release-ready merely because source has been committed.
