@@ -1,6 +1,5 @@
 package com.nshd.nurm3.ui
 
-import androidx.compose.animation.core.LocalMotionDurationScale
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
@@ -87,7 +86,7 @@ fun NurPrimaryAction(text: String, onClick: () -> Unit, modifier: Modifier = Mod
 /** The 48dp control is semantic and the visual mark is deliberately smaller. */
 @Composable
 fun NurCheckMark(checked: Boolean, modifier: Modifier = Modifier, pending: Boolean = false) {
-    val reduce = LocalNurReduceMotion.current || LocalMotionDurationScale.current.scaleFactor <= 0f
+    val reduce = LocalNurReduceMotion.current
     val progress by animateFloatAsState(if (checked) 1f else 0f, animationSpec = if (reduce) snap() else spring(stiffness = 420f), label = "Check mark")
     val foreground = MaterialTheme.colorScheme.primary
     val empty = MaterialTheme.colorScheme.outline
@@ -121,7 +120,7 @@ fun ChecklistRow(
     date: LocalDate = LocalDate.MIN,
     pending: Boolean = false
 ) {
-    val reduce = LocalNurReduceMotion.current || LocalMotionDurationScale.current.scaleFactor <= 0f
+    val reduce = LocalNurReduceMotion.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed && !reduce) 0.985f else 1f, animationSpec = if (reduce) snap() else spring(stiffness = 520f), label = "Row press")

@@ -1,7 +1,6 @@
 package com.nshd.nurm3.ui
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.LocalMotionDurationScale
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -81,7 +80,7 @@ fun NurTopBar(route: String, today: LocalDate, onBack: () -> Unit, onSettings: (
 @Composable
 fun NurBottomBar(current: String, onNavigate: (String) -> Unit) {
     val scheme = MaterialTheme.colorScheme
-    val reduce = LocalNurReduceMotion.current || LocalMotionDurationScale.current.scaleFactor <= 0f
+    val reduce = LocalNurReduceMotion.current
     Surface(color = scheme.background, tonalElevation = 0.dp) {
         Column {
             HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.65f))

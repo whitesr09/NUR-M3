@@ -1,7 +1,6 @@
 package com.nshd.nurm3.ui
 
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.LocalMotionDurationScale
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
@@ -33,7 +32,7 @@ object NurMotion {
 @Composable
 fun rememberNurProgress(target: Float, date: LocalDate, label: String): Float {
     val value = NurMotion.fraction(target)
-    val reduceMotion = LocalNurReduceMotion.current || LocalMotionDurationScale.current.scaleFactor <= 0f
+    val reduceMotion = LocalNurReduceMotion.current
     val state = remember(date, label) { Animatable(value) }
     LaunchedEffect(state, value, reduceMotion) {
         if (reduceMotion) state.snapTo(value)
