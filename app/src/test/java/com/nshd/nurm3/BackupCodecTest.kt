@@ -34,9 +34,6 @@ class BackupCodecTest {
     @Test fun acceptsVersionsOneAndTwoWithoutDhikr() {
         val current = BackupCodec.export(listOf(entry), listOf(completion))
         for (version in 1..2) {
-            val root = JSONObject(current).put("schema", version)
-                .remove("dhikrPhrases")
-            // JSONObject.remove returns the removed value, so create a separate root below.
             val legacy = JSONObject(current).put("schema", version)
             legacy.remove("dhikrPhrases")
             legacy.remove("dhikrDays")
