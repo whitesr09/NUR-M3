@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -72,7 +71,7 @@ fun NurTopBar(route: String, today: LocalDate, onBack: () -> Unit, onSettings: (
                 }
             }
             if (home) {
-                Text("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary, maxLines = 2)
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
         }
@@ -92,7 +91,7 @@ fun NurBottomBar(current: String, onNavigate: (String) -> Unit) {
                     val tint by animateColorAsState(if (selected) scheme.primary else scheme.onSurfaceVariant, animationSpec = if (reduce) snap() else tween(180), label = "Navigation tint")
                     val interaction = remember { MutableInteractionSource() }
                     Column(
-                        Modifier.weight(1f).heightIn(min = 58.dp).clip(RoundedCornerShape(14.dp))
+                        Modifier.weight(1f).heightIn(min = 58.dp).clip(MaterialTheme.shapes.medium)
                             .background(if (selected) scheme.primary.copy(alpha = 0.10f) else Color.Transparent)
                             .clickable(interactionSource = interaction, indication = ripple(), role = Role.Tab) { onNavigate(item.route) }
                             .semantics { this.selected = selected },
