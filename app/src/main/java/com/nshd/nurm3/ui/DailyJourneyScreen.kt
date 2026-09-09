@@ -1,7 +1,6 @@
 package com.nshd.nurm3.ui
 
 import androidx.compose.animation.animateContentSize
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +13,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.*
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.nshd.nurm3.NurViewModel
 import com.nshd.nurm3.data.*
 import java.time.LocalDate
@@ -23,37 +23,49 @@ fun DailyJourneyScreen(entries: List<Entry>, completions: List<Completion>, toda
     val active = entries.filter { EntrySchedule.isActive(it, today) }
     val done = DailyProgress.completedIds(completions, today)
     val summary = DailyProgress.lightSummary(entries, completions, today)
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    val pending by model.completionPending.collectAsStateWithLifecycle()
+    val prayerEntries = active.filter { it.kind == NurKind.PRAYER }
+    val prayersDone = prayerEntries.count { it.id in done }
+    LazyColumn(contentPadding = PaddingValues(NurDesign.pagePadding), verticalArrangement = Arrangement.spacedBy(18.dp)) {
         item {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("Your Daily Journey", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
-                    Text("A meaningful day, one step at a time.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            NurPageHeading("Your space", "Your Daily Journey", "A meaningful day, one step at a time.", action = {
+                IconButton(onClick = { navigate("layout") }, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Default.Tune, contentDescription = "Customize Journey")
                 }
-                IconButton(onClick = { navigate("layout") }) { Icon(Icons.Default.Tune, contentDescription = "Customize Journey") }
-            }
+            })
         }
         items(prefs.journey.visible(), key = { it }) { id ->
             when (id) {
-                JourneyCard.LIGHT -> DailyLightCard(summary, active.filter { it.kind == NurKind.PRAYER }.count { it.id in done }, today, prefs)
-                JourneyCard.PRAYERS -> {
-                    SectionCard("Your prayers", "Five daily prayers", null) {
-                        active.filter { it.kind == NurKind.PRAYER }.forEach { entry ->
-                            ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today)
-                        }
+                JourneyCard.LIGHT -> DailyLightCard(summary, prayersDone, today, prefs)
+                JourneyCard.PRAYERS -> SectionCard("Your prayers", "$prayersDone of 5 completed", null) {
+                    if (prayerEntries.isEmpty()) Text("Loading your prayer checklist…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    prayerEntries.forEach { entry ->
+                        ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today, pending = CompletionGate.key(entry.id, today) in pending)
                     }
                 }
                 JourneyCard.AMANAH, JourneyCard.MUHASABA, JourneyCard.RHYTHM -> {
-                    val kind = id
-                    val section = active.filter { it.kind == kind }
+                    val section = active.filter { it.kind == id }
                     val count = section.count { it.id in done }
                     SectionCard(JourneyCard.titles[id] ?: id, "$count of ${section.size} completed", { navigate(id) }) {
-                        if (section.isEmpty()) Text("No items scheduled today.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        if (section.isEmpty()) Text("Nothing scheduled today. Your saved entries are still available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         else {
                             NurLinearProgress(count.toFloat() / section.size, today, "${JourneyCard.titles[id] ?: id} progress")
-                            section.take(3).forEach { entry -> ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today) }
+                            section.take(3).forEach { entry ->
+                                ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today, pending = CompletionGate.key(entry.id, today) in pending)
+                            }
+                            if (section.size > 3) TextButton(onClick = { navigate(id) }) { Text("View all ${section.size} entries") }
                         }
                     }
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = { navigate("dhikr") }, modifier = Modifier.weight(1f).heightIn(min = 52.dp), shape = MaterialTheme.shapes.medium) {
+                    Icon(Icons.Default.TouchApp, null, Modifier.size(18.dp)); Spacer(Modifier.width(7.dp)); Text("Dhikr")
+                }
+                OutlinedButton(onClick = { navigate("reflections") }, modifier = Modifier.weight(1f).heightIn(min = 52.dp), shape = MaterialTheme.shapes.medium) {
+                    Icon(Icons.Default.MenuBook, null, Modifier.size(18.dp)); Spacer(Modifier.width(7.dp)); Text("Quran")
                 }
             }
         }
@@ -66,25 +78,43 @@ private fun DailyLightCard(summary: ProgressSummary, prayersDone: Int, today: Lo
     val target = NurMotion.fraction(summary.fraction)
     val progress = rememberNurProgress(target, today, "Daily Light")
     val outer = rememberNurProgress(prayersDone / 5f, today, "Daily Light prayers")
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(if (LocalNurCompact.current) 16.dp else 22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (prefs.showArabic) Text("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-            Text("Daily Light", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Box(Modifier.size(198.dp).clearAndSetSemantics { contentDescription = "Daily Light: ${summary.completed} of ${summary.total} completed"; progressBarRangeInfo = ProgressBarRangeInfo(target, 0f..1f) }, contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(progress = { outer }, modifier = Modifier.size(188.dp), strokeWidth = 3.dp, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f), trackColor = MaterialTheme.colorScheme.surfaceVariant)
-                CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(154.dp), strokeWidth = 10.dp, color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant)
+    val scheme = MaterialTheme.colorScheme
+    NurPanel(Modifier.fillMaxWidth()) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("DAILY LIGHT", style = MaterialTheme.typography.labelSmall, color = scheme.primary, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Text("A little light, every day", style = MaterialTheme.typography.titleLarge)
+            }
+            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(24.dp))
+        }
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(206.dp).clearAndSetSemantics {
+                contentDescription = "Daily Light: ${summary.completed} of ${summary.total} completed. $prayersDone of 5 prayers."
+                progressBarRangeInfo = ProgressBarRangeInfo(target, 0f..1f)
+            }, contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(progress = { outer }, modifier = Modifier.size(194.dp), strokeWidth = 3.dp, color = scheme.primary.copy(alpha = 0.7f), trackColor = scheme.surfaceVariant.copy(alpha = 0.45f))
+                CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(158.dp), strokeWidth = 10.dp, color = scheme.primary, trackColor = scheme.surfaceVariant.copy(alpha = 0.65f))
                 listOf(Alignment.TopCenter, Alignment.BottomCenter, Alignment.CenterStart, Alignment.CenterEnd).forEach { alignment ->
-                    Box(Modifier.fillMaxSize(), contentAlignment = alignment) { Text("✦", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelMedium) }
+                    Box(Modifier.fillMaxSize(), contentAlignment = alignment) {
+                        Icon(Icons.Default.Star, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))
+                    }
                 }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text("الله", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
-                    Text("${NurMotion.percent(progress)}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text("الله", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = scheme.primary)
+                    Text("${NurMotion.percent(progress)}%", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
                 }
             }
-            Text("${summary.completed} of ${summary.total} completed", style = MaterialTheme.typography.bodyMedium)
-            Text("$prayersDone of 5 prayers", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            HorizontalDivider()
-            Text("Your journey is built one sincere action at a time.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Today's progress", style = MaterialTheme.typography.bodyMedium, color = scheme.onSurfaceVariant)
+            Text("${summary.completed} / ${summary.total}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        }
+        NurLinearProgress(target, today, "Daily Light total progress")
+        Text("$prayersDone of 5 prayers completed", style = MaterialTheme.typography.labelMedium, color = scheme.onSurfaceVariant)
+        if (prefs.showArabic) {
+            HorizontalDivider(color = scheme.outlineVariant.copy(alpha = 0.55f))
+            Text("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", modifier = Modifier.fillMaxWidth(), style = MaterialTheme.typography.titleSmall, color = scheme.primary)
         }
     }
 }
@@ -92,30 +122,16 @@ private fun DailyLightCard(summary: ProgressSummary, prayersDone: Int, today: Lo
 @Composable
 fun SectionCard(title: String, subtitle: String, onOpen: (() -> Unit)?, content: @Composable ColumnScope.() -> Unit) {
     val reduceMotion = LocalNurReduceMotion.current
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.then(if (reduceMotion) Modifier else Modifier.animateContentSize()).padding(if (LocalNurCompact.current) 12.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                if (onOpen != null) IconButton(onClick = onOpen) { Icon(Icons.Default.ChevronRight, contentDescription = "Open $title") }
+    NurPanel(Modifier.fillMaxWidth().then(if (reduceMotion) Modifier else Modifier.animateContentSize())) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            content()
+            if (onOpen != null) IconButton(onClick = onOpen, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Default.ChevronRight, contentDescription = "Open $title", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-    }
-}
-
-@Composable
-fun ChecklistRow(entry: Entry, checked: Boolean, onChecked: (Boolean) -> Unit, enabled: Boolean = true, trailing: (@Composable () -> Unit)? = null, date: LocalDate = LocalDate.MIN) {
-    val feedback = rememberNurProgress(if (checked && enabled) 1f else 0f, date, "completion-${entry.id}")
-    val tint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f * feedback)
-    Row(Modifier.fillMaxWidth().background(tint, MaterialTheme.shapes.medium), verticalAlignment = Alignment.CenterVertically) {
-        Checkbox(checked = checked, onCheckedChange = onChecked, enabled = enabled)
-        Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
-            Text(entry.title, style = MaterialTheme.typography.bodyLarge)
-            if (entry.kind != NurKind.PRAYER && entry.schedule != "daily") Text(entry.schedule.replaceFirstChar { it.uppercase() }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        trailing?.invoke()
+        content()
     }
 }
