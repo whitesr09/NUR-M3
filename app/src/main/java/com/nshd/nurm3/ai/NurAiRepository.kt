@@ -93,9 +93,9 @@ class NurAiRepository(context: Context) {
         }
 
     private fun httpError(code: Int): String = when (code) {
-        400 -> "The request was rejected. Check your model and settings."
-        401, 403 -> "Gemini authentication failed. Check your API key and project access."
-        404 -> "The selected model is unavailable. Choose another Gemini model."
+        400 -> "Gemini rejected the request. Check the API project and request settings."
+        401, 403 -> "Gemini authentication failed. Create a Gemini API key in Google AI Studio and check project access."
+        404 -> "Gemini could not use the resolved model. Reopen NUR AI and try again."
         429 -> "Gemini rate limit reached. Try again later or check your quota."
         else -> "Gemini request failed (HTTP $code)."
     }
@@ -123,7 +123,9 @@ class NurAiRepository(context: Context) {
 
     /**
      * Streams Gemini Server-Sent Events and emits the aggregated readable text after each chunk.
-     * The callback is suspend so the UI can safely switch to its main dispatcher before updating state.
+     * Before sending, NUR asks Gemini which generateContent models this API key can actually use.
+     * If a saved model has been retired or is unavailable for the project, a supported Flash model
+     * is selected automatically and persisted for the next request.
      */
     suspend fun sendStreaming(
         messages: List<AiMessage>,
@@ -133,7 +135,9 @@ class NurAiRepository(context: Context) {
     ): AiReply = withContext(Dispatchers.IO) {
         require(consent) { "Enable NUR AI network access first." }
         val key = store.get(keyName) ?: error("Add your Gemini API key first.")
-        val selectedModel = model()
+        val preferredModel = model()
+        val selectedModel = GeminiModelResolver.resolve(key, preferredModel)
+        if (selectedModel != preferredModel) store.put(modelName, selectedModel)
         val body = requestBody(messages, useGrounding)
         val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$selectedModel:streamGenerateContent?alt=sse"
         val connection = openConnection(endpoint, key, "text/event-stream")
@@ -192,8 +196,8 @@ class NurAiRepository(context: Context) {
         sendStreaming(messages, consent, useGrounding)
 
     companion object {
-        const val DEFAULT_MODEL = "gemini-2.5-flash"
-        val MODEL_PRESETS = listOf("gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-flash-latest")
+        const val DEFAULT_MODEL = "gemini-3.8-flash"
+        val MODEL_PRESETS = listOf("gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-flash-latest")
         private const val MAX_STREAM_CHARS = 1_048_576
         private const val MAX_TEXT_CHARS = 32_000
         private val MODEL_PATTERN = Regex("[A-Za-z0-9._-]{3,80}")
