@@ -34,16 +34,22 @@ interface FocusDao {
     fun observeRoutines(): Flow<List<FocusRoutine>>
     @Query("SELECT * FROM focus_sessions WHERE id = :id")
     suspend fun session(id: String): FocusSession?
+    @Query("SELECT * FROM focus_sessions WHERE status = 'paused' ORDER BY startedAt DESC LIMIT 1")
+    suspend fun recoverableSession(): FocusSession?
+    @Query("SELECT * FROM focus_sessions ORDER BY startedAt DESC")
+    suspend fun allSessions(): List<FocusSession>
+    @Query("SELECT * FROM focus_routines ORDER BY createdAt, name")
+    suspend fun allRoutines(): List<FocusRoutine>
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveSession(session: FocusSession)
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveRoutine(routine: FocusRoutine)
     @Query("DELETE FROM focus_routines WHERE id = :id")
     suspend fun deleteRoutine(id: String)
-    @Query("SELECT * FROM focus_sessions WHERE status = 'running' ORDER BY startedAt DESC")
-    suspend fun interruptedSessions(): List<FocusSession>
     @Query("UPDATE focus_sessions SET status = 'paused' WHERE status = 'running'")
     suspend fun pauseInterrupted()
+    @Query("DELETE FROM focus_sessions WHERE id = :id AND status != 'running'")
+    suspend fun deleteSession(id: String)
 }
 
 @Database(entities = [FocusSession::class, FocusRoutine::class], version = 1, exportSchema = true)
@@ -58,7 +64,6 @@ abstract class FocusDatabase : RoomDatabase() {
     }
 }
 
-/** Pure rules shared by the timer, persistence layer and unit tests. */
 object FocusRules {
     fun validMinutes(minutes: Int) = minutes in 1..240
     fun remaining(planned: Int, elapsed: Int) = (planned - elapsed).coerceAtLeast(0)
