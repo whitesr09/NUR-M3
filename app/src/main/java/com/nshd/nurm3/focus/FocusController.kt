@@ -4,8 +4,8 @@ import android.app.Application
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,12 +15,12 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-/** Foreground-only timer; every persisted update is serialized in submission order. */
+/** Foreground-only timer. Database checkpoints survive Activity/ViewModel recreation. */
 class FocusController(application: Application) : AndroidViewModel(application) {
-    private val dao = FocusDatabase.get(application).dao()
+    private val persistence = FocusPersistence.get(application)
+    private val dao = persistence.dao
     val sessions = dao.observeSessions().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     val routines = dao.observeRoutines().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-    private val pendingWrites = Channel<FocusSession>(Channel.UNLIMITED)
     private val _active = MutableStateFlow<FocusSession?>(null)
     val active: StateFlow<FocusSession?> = _active.asStateFlow()
     private val _remaining = MutableStateFlow(0)
@@ -32,15 +32,16 @@ class FocusController(application: Application) : AndroidViewModel(application) 
 
     init {
         viewModelScope.launch {
-            // A previous process's running interval is restored as paused, never extrapolated.
-            dao.pauseInterrupted()
-            dao.recoverableSession()?.let { if (_active.value == null) restore(it) }
-            for (session in pendingWrites) dao.saveSession(session)
+            try {
+                persistence.awaitReady()
+                dao.recoverableSession()?.let { if (_active.value == null) restore(it) }
+            } catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { _message.value = "Could not open saved Focus sessions." }
         }
     }
-
     private fun now() = SystemClock.elapsedRealtime()
-    private fun persist(session: FocusSession) { pendingWrites.trySend(session) }
+    private fun persist(session: FocusSession) = persistence.submit(session)
+    suspend fun flush() = persistence.flush()
     private fun stopTicker() { ticker?.cancel(); ticker = null }
     private fun snapshot(status: String? = null): FocusSession? {
         val current = _active.value ?: return null
@@ -104,8 +105,11 @@ class FocusController(application: Application) : AndroidViewModel(application) 
         val completed = current.copy(elapsedSeconds = current.plannedSeconds, status = "completed", finishedAt = System.currentTimeMillis())
         _active.value = completed
         _remaining.value = 0
-        persist(completed)
-        _message.value = "Focus session completed and saved."
+        viewModelScope.launch {
+            try { persistence.save(completed); _message.value = "Focus session completed and saved." }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { _message.value = "The session finished, but saving failed. Do not clear app data; try again." }
+        }
     }
     fun cancel() {
         val current = _active.value ?: return
@@ -131,5 +135,5 @@ class FocusController(application: Application) : AndroidViewModel(application) 
         viewModelScope.launch { dao.saveRoutine(FocusRoutine(name = name.trim().take(100), workMinutes = work, restMinutes = rest)) }
     }
     fun deleteRoutine(id: String) { viewModelScope.launch { dao.deleteRoutine(id) } }
-    override fun onCleared() { pause(); stopTicker(); pendingWrites.close(); super.onCleared() }
+    override fun onCleared() { pause(); stopTicker(); super.onCleared() }
 }
