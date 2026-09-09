@@ -50,6 +50,10 @@ interface FocusDao {
     suspend fun pauseInterrupted()
     @Query("DELETE FROM focus_sessions WHERE id = :id AND status != 'running'")
     suspend fun deleteSession(id: String)
+    @Query("DELETE FROM focus_sessions")
+    suspend fun clearSessionsForRestore()
+    @Query("DELETE FROM focus_routines")
+    suspend fun clearRoutinesForRestore()
 }
 
 @Database(entities = [FocusSession::class, FocusRoutine::class], version = 1, exportSchema = true)
