@@ -9,10 +9,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,14 +19,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalMotionDurationScale
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -43,8 +41,6 @@ object NurDesign {
     val gold = Color(0xFFD9B96F)
     val darkGold = Color(0xFF75551A)
     val pagePadding = 20.dp
-    val cardRadius = 20.dp
-    val rowRadius = 14.dp
     val touchTarget = 48.dp
 }
 
@@ -53,7 +49,7 @@ fun NurPanel(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
     val compact = LocalNurCompact.current
     Surface(
         modifier = modifier,
-        shape = RoundedCornerShape(NurDesign.cardRadius),
+        shape = MaterialTheme.shapes.large,
         color = MaterialTheme.colorScheme.surface,
         border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
         tonalElevation = 0.dp,
@@ -79,7 +75,7 @@ fun NurPageHeading(eyebrow: String, title: String, subtitle: String, action: (@C
 fun NurPrimaryAction(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, icon: (@Composable () -> Unit)? = null) {
     Button(
         onClick = onClick, enabled = enabled, modifier = modifier.heightIn(min = 52.dp),
-        shape = RoundedCornerShape(14.dp),
+        shape = MaterialTheme.shapes.medium,
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary)
     ) {
@@ -100,7 +96,7 @@ fun NurCheckMark(checked: Boolean, modifier: Modifier = Modifier, pending: Boole
             val size = this.size
             val radius = CornerRadius(7.dp.toPx())
             drawRoundRect(color = foreground.copy(alpha = 0.12f * progress), cornerRadius = radius)
-            drawRoundRect(color = if (progress > 0.5f) foreground else empty, cornerRadius = radius, style = Stroke(width = 1.6.dp.toPx()))
+            drawRoundRect(color = lerp(empty, foreground, progress), cornerRadius = radius, style = Stroke(width = 1.6.dp.toPx()))
             if (progress > 0f) {
                 val check = Path().apply {
                     moveTo(size.width * 0.25f, size.height * 0.52f)
@@ -131,7 +127,7 @@ fun ChecklistRow(
     val scale by animateFloatAsState(if (pressed && !reduce) 0.985f else 1f, animationSpec = if (reduce) snap() else spring(stiffness = 520f), label = "Row press")
     val highlight = rememberNurProgress(if (checked) 1f else 0f, date, "row-${entry.id}")
     val scheme = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(NurDesign.rowRadius)
+    val shape = MaterialTheme.shapes.medium
     val canToggle = enabled && !pending
     val status = when {
         pending -> "Saving…"
@@ -175,16 +171,17 @@ fun NurMoreAction(label: String, onClick: () -> Unit) {
     }
 }
 
-/** An explicit, accessible switch row without an accidentally nested click target. */
+/** The full setting row has one toggle action and one accessibility node. */
 @Composable
 fun NurSettingRow(title: String, description: String, value: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+    val interaction = remember { MutableInteractionSource() }
     NurPanel(Modifier.fillMaxWidth()) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(Modifier.fillMaxWidth().toggleable(value = value, enabled = enabled, role = Role.Switch, interactionSource = interaction, indication = ripple(), onValueChange = onChange).semantics(mergeDescendants = true) { contentDescription = title }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Switch(checked = value, onCheckedChange = onChange, enabled = enabled, colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.onPrimary))
+            Switch(checked = value, onCheckedChange = null, enabled = enabled, modifier = Modifier.clearAndSetSemantics { }, colors = SwitchDefaults.colors(checkedThumbColor = MaterialTheme.colorScheme.onPrimary))
         }
     }
 }
