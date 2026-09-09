@@ -1,0 +1,3 @@
+# Focus implementation contract
+
+A focus session is counted only after its planned duration has elapsed during actual active running. Pause and stop must save the accumulated duration; restarting a process must not infer elapsed time while the process was absent. Each completed session has a stable identifier and is written only once. Routine definitions may suggest what to work on, but never mark tasks or prayers complete automatically. Time calculations must use a monotonic clock while running and wall-clock timestamps only as audit metadata. The interface must offer pause, resume, cancel and a clear completed state.

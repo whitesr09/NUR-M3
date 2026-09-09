@@ -1,11 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:allowBackup="true" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules" android:label="NUR" android:theme="@style/Theme.NUR" android:supportsRtl="true">
-        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <application
+        android:allowBackup="true"
+        android:fullBackupContent="@xml/backup_rules"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
+        android:theme="@style/Theme.NUR"
+        android:supportsRtl="true"
+        android:usesCleartextTraffic="false">
+        <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize" android:launchMode="singleTop">
             <intent-filter>
-                <action android:name="android.intent.action.MAIN"/>
-                <category android:name="android.intent.category.LAUNCHER"/>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <receiver android:name=".widget.NurWidgetProvider" android:exported="true" android:label="NUR Daily Light">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/nur_daily_widget" />
+        </receiver>
+        <receiver android:name=".widget.NurPrayerWidgetProvider" android:exported="true" android:label="NUR Prayers">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/nur_prayer_widget" />
+        </receiver>
+        <receiver android:name=".widget.NurTaskWidgetProvider" android:exported="true" android:label="NUR Amanah">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/nur_task_widget" />
+        </receiver>
+        <receiver android:name=".widget.NurQuickWidgetProvider" android:exported="true" android:label="NUR Quick Actions">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/nur_quick_widget" />
+        </receiver>
+        <receiver android:name=".widget.NurWidgetRefreshReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.DATE_CHANGED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+            </intent-filter>
+        </receiver>
     </application>
 </manifest>

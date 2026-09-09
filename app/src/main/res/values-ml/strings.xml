@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">നൂർ</string>
+    <string name="accessibility_title">പ്രവേശനക്ഷമത</string>
+    <string name="accessibility_subtitle">വായനയും ഉപയോഗവും കൂടുതൽ സൗകര്യപ്രദമാക്കുക</string>
+    <string name="accessibility_language">ഭാഷ</string>
+    <string name="accessibility_text_size">അക്ഷര വലുപ്പം</string>
+    <string name="accessibility_contrast">ഉയർന്ന കോൺട്രാസ്റ്റ്</string>
+    <string name="accessibility_motion">ചലനങ്ങൾ കുറയ്ക്കുക</string>
+    <string name="accessibility_hints">സഹായക നിർദ്ദേശങ്ങൾ</string>
+    <string name="accessibility_preview">വായനയുടെ മാതൃക</string>
+    <string name="accessibility_system">സിസ്റ്റം ഭാഷ</string>
+    <string name="accessibility_english">ഇംഗ്ലീഷ്</string>
+    <string name="accessibility_malayalam">മലയാളം</string>
+    <string name="accessibility_arabic">അറബി</string>
+    <string name="accessibility_save">സംരക്ഷിക്കുക</string>
+    <string name="accessibility_review_note">പുതിയ ഫീച്ചറുകളിലെ ചില ലേബലുകൾ മാത്രമാണ് പരിഭാഷപ്പെടുത്തിയിരിക്കുന്നത്. മുഴുവൻ ആപ്പിന്റെയും പരിഭാഷ ഇതുവരെ പൂർത്തിയായിട്ടില്ല.</string>
+    <string name="widget_description">നൂർ ഡെയ്‌ലി ലൈറ്റും കുറുക്കുവഴികളും</string>
+    <string name="widget_prayer_description">നമസ്കാര ചെക്ക്‌ലിസ്റ്റിന്റെ പുരോഗതി</string>
+    <string name="widget_task_description">അമാനത്ത് ടാസ്‌കുകളുടെ പുരോഗതി</string>
+    <string name="widget_quick_description">ടാസ്‌ക്, ദിക്ർ, ഫോക്കസ് കുറുക്കുവഴികൾ</string>
+</resources>

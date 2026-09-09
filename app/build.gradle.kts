@@ -12,12 +12,36 @@ android {
         applicationId = "com.nshd.nurm3"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 5
+        versionName = "0.12.0-preview.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
+    signingConfigs {
+        create("nurStableDebug") {
+            storeFile = file("keystores/nur-m3-test.jks")
+            storePassword = "nur-m3-test-pass"
+            keyAlias = "nur-m3-test"
+            keyPassword = "nur-m3-test-pass"
+        }
+        val releaseStore = providers.environmentVariable("NUR_RELEASE_STORE_FILE").orNull
+        val releaseStorePassword = providers.environmentVariable("NUR_RELEASE_STORE_PASSWORD").orNull
+        val releaseKeyAlias = providers.environmentVariable("NUR_RELEASE_KEY_ALIAS").orNull
+        val releaseKeyPassword = providers.environmentVariable("NUR_RELEASE_KEY_PASSWORD").orNull
+        if (!releaseStore.isNullOrBlank() && !releaseStorePassword.isNullOrBlank() && !releaseKeyAlias.isNullOrBlank() && !releaseKeyPassword.isNullOrBlank()) {
+            create("nurRelease") {
+                storeFile = file(releaseStore)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
     buildTypes {
-        release { isMinifyEnabled = false }
+        debug { signingConfig = signingConfigs.getByName("nurStableDebug") }
+        release {
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("nurRelease")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -28,7 +52,10 @@ android {
     packaging { resources.excludes += "/META-INF/{AL2.0,LGPL2.1}" }
 }
 
-kapt { correctErrorTypes = true }
+kapt {
+    correctErrorTypes = true
+    arguments { arg("room.schemaLocation", "$projectDir/schemas") }
+}
 
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2025.04.01"))
@@ -49,7 +76,10 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
+    testImplementation("org.json:json:20240303")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    androidTestImplementation("androidx.test:core:1.6.1")
+    androidTestImplementation("androidx.room:room-testing:2.7.1")
     debugImplementation("androidx.compose.ui:ui-tooling")
 }

@@ -1,229 +1,194 @@
 package com.nshd.nurm3
 
+import android.hardware.biometrics.BiometricPrompt
+import android.hardware.biometrics.BiometricManager
+import android.app.KeyguardManager
+import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
+import android.os.CancellationSignal
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.compose.*
 import com.nshd.nurm3.data.*
-import com.nshd.nurm3.ui.NurTheme
-import java.time.LocalDate
-import java.time.format.DateTimeFormatter
+import com.nshd.nurm3.focus.FocusController
+import com.nshd.nurm3.ui.*
+import com.nshd.nurm3.widget.NurWidgetProvider
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 
 class MainActivity : ComponentActivity() {
     private val model: NurViewModel by viewModels()
+    private val focus: FocusController by viewModels()
+    private val privateStore by lazy { NurPrivateStore(this) }
+    private val lock by lazy { NurLock(privateStore) }
+    val refreshController by lazy { NurRefreshController(window, this) }
+    private val requestedRoute = MutableStateFlow("")
+    private var authResult: ((Boolean, String) -> Unit)? = null
+    override fun attachBaseContext(newBase: Context) { super.attachBaseContext(NurAccessibilityStore.localized(newBase)) }
+    private val credentialLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val callback = authResult
+        authResult = null
+        callback?.invoke(result.resultCode == RESULT_OK, if (result.resultCode == RESULT_OK) "" else "Device authentication was cancelled")
+    }
+    private fun authenticateDevice(callback: (Boolean, String) -> Unit) {
+        if (authResult != null) { callback(false, "Authentication is already in progress"); return }
+        val manager = getSystemService(KeyguardManager::class.java)
+        if (!manager.isDeviceSecure) { callback(false, "Set a secure Android screen lock first"); return }
+        authResult = callback
+        if (Build.VERSION.SDK_INT >= 30) {
+            try {
+                val prompt = BiometricPrompt.Builder(this)
+                    .setTitle("Unlock NUR")
+                    .setSubtitle("Confirm your identity")
+                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                    .build()
+                prompt.authenticate(CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
+                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                        val next = authResult; authResult = null; next?.invoke(true, "")
+                    }
+                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                        val next = authResult; authResult = null; next?.invoke(false, errString.toString())
+                    }
+                })
+            } catch (error: Exception) {
+                val next = authResult; authResult = null; next?.invoke(false, error.message ?: "Authentication unavailable")
+            }
+        } else {
+            val intent = manager.createConfirmDeviceCredentialIntent("Unlock NUR", "Confirm your screen lock")
+            if (intent != null) credentialLauncher.launch(intent)
+            else { authResult = null; callback(false, "Device credential unavailable") }
+        }
+    }
+    private fun acceptRoute(intent: Intent?) {
+        val route = intent?.getStringExtra(NurWidgetProvider.EXTRA_ROUTE) ?: return
+        if (route in setOf("journey", "amanah", "amanah?create=true", "dhikr", "focus", "reflections", "settings")) requestedRoute.value = route
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { NurApp(model) }
+        enableEdgeToEdge()
+        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        lifecycle.addObserver(refreshController)
+        acceptRoute(intent)
+        setContent {
+            val route by requestedRoute.collectAsStateWithLifecycle()
+            NurApp(model, focus, lock, ::authenticateDevice, route) { requestedRoute.value = "" }
+        }
     }
-    override fun onResume() {
-        super.onResume()
-        model.refreshDate()
-    }
+    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptRoute(intent) }
+    override fun onResume() { super.onResume(); model.refreshDate(); NurWidgetProvider.refresh(this) }
+    override fun onStop() { focus.pause(); lock.lock(); super.onStop() }
+    override fun onDestroy() { authResult = null; super.onDestroy() }
 }
 
-private enum class Destination(val label: String) { HOME("Home"), AMANAH("Amanah"), MUHASABA("Muhasaba"), HISTORY("History"), SETTINGS("Settings") }
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NurApp(model: NurViewModel) {
-    val prefs by model.preferences.collectAsStateWithLifecycle()
+fun NurApp(model: NurViewModel, focus: FocusController, lock: NurLock, authenticate: ((Boolean, String) -> Unit) -> Unit, requestedRoute: String = "", consumeRoute: () -> Unit = {}) {
+    val savedPrefs by model.preferences.collectAsStateWithLifecycle()
     val entries by model.entries.collectAsStateWithLifecycle()
+    val allEntries by model.allEntries.collectAsStateWithLifecycle()
     val completions by model.completions.collectAsStateWithLifecycle()
     val today by model.today.collectAsStateWithLifecycle()
-    var destination by rememberSaveable { mutableStateOf(Destination.HOME) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            model.refreshDate()
-            delay(30_000)
+    val locked by lock.locked.collectAsStateWithLifecycle()
+    val activity = androidx.compose.ui.platform.LocalContext.current as MainActivity
+    val accessStore = remember(activity) { NurAccessibilityStore.get(activity) }
+    val accessibility by accessStore.settings.collectAsStateWithLifecycle()
+    val prefs = savedPrefs.copy(
+        typeScale = (savedPrefs.typeScale * accessibility.textScale).coerceIn(0.85f, 2f),
+        reduceMotion = savedPrefs.reduceMotion || accessibility.reduceMotion || !android.animation.ValueAnimator.areAnimatorsEnabled(),
+        compactCards = savedPrefs.compactCards && accessibility.textScale <= 1.1f
+    )
+    val refreshStatus by activity.refreshController.status.collectAsStateWithLifecycle()
+    val nav = rememberNavController()
+    val current = (nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey").substringBefore("?")
+    val snackbar = remember { SnackbarHostState() }
+    var showGuide by rememberSaveable { mutableStateOf(!activity.getSharedPreferences("nur_onboarding", Context.MODE_PRIVATE).getBoolean("guide_seen", false)) }
+    val dark = when (prefs.themeMode) {
+        "light" -> false
+        "system" -> isSystemInDarkTheme()
+        else -> true
+    }
+    LaunchedEffect(prefs.highRefreshRate, locked) { activity.refreshController.setEnabled(prefs.highRefreshRate && !locked) }
+    SideEffect {
+        if (locked || prefs.privatePreview || current in setOf("ai", "secure-backup")) activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        WindowInsetsControllerCompat(activity.window, activity.window.decorView).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
         }
     }
-    NurTheme(prefs) {
-        Scaffold(
-            topBar = {
-                TopAppBar(title = { Column {
-                    Text("نُور", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text(today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")), style = MaterialTheme.typography.labelSmall)
-                } }, actions = {
-                    IconButton(onClick = { destination = Destination.SETTINGS }) { Icon(Icons.Default.Settings, contentDescription = "Settings") }
-                })
-            },
-            bottomBar = {
-                NavigationBar {
-                    listOf(Destination.HOME, Destination.AMANAH, Destination.MUHASABA, Destination.HISTORY).forEach { item ->
-                        val icon = when (item) {
-                            Destination.HOME -> Icons.Default.Home
-                            Destination.AMANAH -> Icons.Default.Checklist
-                            Destination.MUHASABA -> Icons.Default.EditNote
-                            Destination.HISTORY -> Icons.Default.History
-                            Destination.SETTINGS -> Icons.Default.Settings
-                        }
-                        NavigationBarItem(selected = destination == item, onClick = { destination = item }, icon = { Icon(icon, contentDescription = null) }, label = { Text(item.label) })
-                    }
+    LaunchedEffect(Unit) { while (true) { model.refreshDate(); delay(30_000) } }
+    LaunchedEffect(model, locked) { if (!locked) model.uiEvents.collectLatest { snackbar.showSnackbar(it) } }
+    LaunchedEffect(entries, completions, today, prefs.widgetsEnabled) { NurWidgetProvider.refresh(activity) }
+    NurAccessibleTheme(prefs, accessibility) {
+        if (locked) LockScreen(lock, authenticate)
+        else CompositionLocalProvider(LocalNurSnackbarHost provides snackbar) {
+            val navigate: (String) -> Unit = { route ->
+                if (route != current || route.contains('?')) {
+                    if (route in NurMainTabs.map { it.route }) nav.navigate(route) {
+                        popUpTo(nav.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    } else nav.navigate(route) { launchSingleTop = true }
                 }
             }
-        ) { padding ->
-            Column(Modifier.fillMaxSize().padding(padding)) {
-                when (destination) {
-                    Destination.HOME -> HomeScreen(entries, completions, today, prefs, model)
-                    Destination.AMANAH -> EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model)
-                    Destination.MUHASABA -> EntryScreen("Muhasaba", "Reflect on your day", NurKind.MUHASABA, entries, completions, today, model)
-                    Destination.HISTORY -> HistoryScreen(entries, completions)
-                    Destination.SETTINGS -> SettingsScreen(prefs, model)
+            LaunchedEffect(requestedRoute, locked) {
+                if (!locked && requestedRoute.isNotBlank()) { navigate(requestedRoute); consumeRoute() }
+            }
+            val enter = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(220))
+            val exit = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(120))
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                topBar = { NurTopBar(current, today, onBack = { if (!nav.popBackStack()) navigate("journey") }, onSettings = { navigate("settings") }) },
+                bottomBar = { if (current in NurMainTabs.map { it.route }) NurBottomBar(current, navigate) },
+                snackbarHost = { SnackbarHost(snackbar) }
+            ) { padding ->
+                NavHost(navController = nav, startDestination = "journey", modifier = Modifier.fillMaxSize().padding(padding), enterTransition = { enter }, exitTransition = { exit }, popEnterTransition = { enter }, popExitTransition = { exit }) {
+                    composable("journey") { DailyJourneyScreen14(entries, completions, today, prefs, model, navigate) }
+                    composable("amanah?create={create}", arguments = listOf(androidx.navigation.navArgument("create") { type = androidx.navigation.NavType.BoolType; defaultValue = false })) { entry -> EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model, initialAdd = entry.arguments?.getBoolean("create") == true) }
+                    composable("muhasaba") { EntryScreen("Muhasaba", "Reflect", NurKind.MUHASABA, entries, completions, today, model) }
+                    composable("rhythm") { EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model) }
+                    composable("history") { HistoryScreen(allEntries, completions) }
+                    composable("settings") { PowerSettingsScreen(prefs, model, navigate, lock) }
+                    composable("appearance") { AppearanceStudio14(prefs, model, refreshStatus, navigate) }
+                    composable("fonts") { NurFontSettingsScreen(prefs, model) }
+                    composable("layout") { JourneyStudio14(prefs, model) }
+                    composable("insights") { InsightsScreen(allEntries, completions, today) }
+                    composable("backup") { BackupScreen() }
+                    composable("secure-backup") { SecureBackupScreen() }
+                    composable("backup-health") { BackupHealthScreen() }
+                    composable("privacy") { PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) } }
+                    composable("dhikr") { DhikrScreen(model, prefs, today) }
+                    composable("focus") { FocusScreen(focus) }
+                    composable("ai") { NurAiScreen(prefs, model) }
+                    composable("widgets") { NurWidgetSettingsScreen(prefs, model) }
+                    composable("accessibility") { NurAccessibilityScreen(prefs, model) }
+                    composable("reflections?verse={verse}", arguments = listOf(androidx.navigation.navArgument("verse") { type = androidx.navigation.NavType.StringType; defaultValue = "" })) { entry -> ReflectionScreen(entry.arguments?.getString("verse")) }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun HomeScreen(entries: List<Entry>, completions: List<Completion>, today: LocalDate, prefs: NurPreferences, model: NurViewModel) {
-    val prayers = entries.filter { it.kind == NurKind.PRAYER }
-    val tasks = entries.filter { it.kind != NurKind.PRAYER }
-    val done = completions.filter { it.localDate == today.toString() }.map { it.entryId }.toSet()
-    val total = prayers.size + tasks.size
-    val completed = entries.count { it.id in done }
-    val progress = if (total == 0) 0f else completed.toFloat() / total
-    androidx.compose.foundation.lazy.LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-        item {
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    if (prefs.showArabic) Text("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
-                    Text("Daily Light", style = MaterialTheme.typography.titleLarge)
-                    Box(contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(148.dp), strokeWidth = 9.dp)
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("الله", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
-                            Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.titleMedium)
-                        }
-                    }
-                    Text("$completed of $total completed", style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
-        item { Text("Your prayers", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold) }
-        items(prayers.size) { index ->
-            val entry = prayers[index]
-            EntryRow(entry, entry.id in done, { model.complete(entry.id, today, it) })
-        }
-        item {
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Amanah & Muhasaba", style = MaterialTheme.typography.titleMedium)
-                    Text("${tasks.count { it.id in done }} of ${tasks.size} completed today")
-                    LinearProgressIndicator(progress = { if (tasks.isEmpty()) 0f else tasks.count { it.id in done }.toFloat() / tasks.size }, modifier = Modifier.fillMaxWidth())
-                    Text("Your entries stay saved. Only daily checkmarks start fresh on the next day.", style = MaterialTheme.typography.bodySmall)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun EntryRow(entry: Entry, checked: Boolean, onChecked: (Boolean) -> Unit, onDelete: (() -> Unit)? = null) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Checkbox(checked = checked, onCheckedChange = onChecked)
-            Text(entry.title, Modifier.weight(1f).padding(8.dp), style = MaterialTheme.typography.bodyLarge)
-            if (onDelete != null) IconButton(onClick = onDelete) { Icon(Icons.Default.DeleteOutline, contentDescription = "Delete ${entry.title}") }
-        }
-    }
-}
-
-@Composable
-private fun EntryScreen(title: String, subtitle: String, kind: String, entries: List<Entry>, completions: List<Completion>, today: LocalDate, model: NurViewModel) {
-    var draft by rememberSaveable(kind) { mutableStateOf("") }
-    var deleting by remember { mutableStateOf<Entry?>(null) }
-    val items = entries.filter { it.kind == kind }
-    val done = completions.filter { it.localDate == today.toString() }.map { it.entryId }.toSet()
-    androidx.compose.foundation.lazy.LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text(title, style = MaterialTheme.typography.headlineMedium)
-            Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(value = draft, onValueChange = { draft = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Add an entry") }, singleLine = true)
-            Spacer(Modifier.height(8.dp))
-            Button(onClick = { model.add(kind, draft); draft = "" }, enabled = draft.isNotBlank(), modifier = Modifier.fillMaxWidth()) { Icon(Icons.Default.Add, contentDescription = null); Spacer(Modifier.width(8.dp)); Text("Add") }
-        }
-        item {
-            Text("${items.count { it.id in done }} / ${items.size} completed today", style = MaterialTheme.typography.labelLarge)
-            LinearProgressIndicator(progress = { if (items.isEmpty()) 0f else items.count { it.id in done }.toFloat() / items.size }, modifier = Modifier.fillMaxWidth())
-        }
-        if (items.isEmpty()) item { Text("No entries yet. Add one above to begin.", style = MaterialTheme.typography.bodyMedium) }
-        items(items.size) { index ->
-            val entry = items[index]
-            EntryRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, { deleting = entry })
-        }
-    }
-    deleting?.let { entry ->
-        AlertDialog(onDismissRequest = { deleting = null }, title = { Text("Delete entry?") }, text = { Text("${entry.title} will be removed from your active list and its completion records deleted.") }, confirmButton = { TextButton(onClick = { model.delete(entry.id); deleting = null }) { Text("Delete") } }, dismissButton = { TextButton(onClick = { deleting = null }) { Text("Cancel") } })
-    }
-}
-
-@Composable
-private fun HistoryScreen(entries: List<Entry>, completions: List<Completion>) {
-    val dates = completions.map { it.localDate }.distinct().sortedDescending()
-    androidx.compose.foundation.lazy.LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("History", style = MaterialTheme.typography.headlineMedium); Text("Your recorded activity, never invented or backfilled.") }
-        if (dates.isEmpty()) item { Text("No completed days recorded yet.") }
-        items(dates.size) { index ->
-            val date = dates[index]
-            val records = completions.filter { it.localDate == date }
-            ElevatedCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(date, style = MaterialTheme.typography.titleMedium)
-                    Text("${records.size} recorded completions", color = MaterialTheme.colorScheme.primary)
-                    records.forEach { record ->
-                        val name = entries.firstOrNull { it.id == record.entryId }?.title ?: "Archived entry"
-                        Text("• $name", style = MaterialTheme.typography.bodyMedium)
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun SettingsScreen(prefs: NurPreferences, model: NurViewModel) {
-    androidx.compose.foundation.lazy.LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item { Text("Appearance", style = MaterialTheme.typography.headlineMedium); Text("Make NUR feel like your own.") }
-        item { SettingToggle("Dark mode", "Use the deep black-blue palette", prefs.darkMode) { model.setting("dark", it) } }
-        item { SettingToggle("Dynamic color", "Use your Android wallpaper colors on Android 12+", prefs.dynamicColor) { model.setting("dynamic", it) } }
-        item { SettingToggle("Gold accent", "Use NUR's signature golden color", prefs.goldAccent) { model.setting("gold", it) } }
-        item { SettingToggle("Reduce motion", "Preference for minimal animation", prefs.reduceMotion) { model.setting("motion", it) } }
-        item { SettingToggle("Arabic header", "Show Bismillah in Daily Light", prefs.showArabic) { model.setting("arabic", it) } }
-        item {
-            HorizontalDivider()
-            Spacer(Modifier.height(12.dp))
-            Text("NUR AI", style = MaterialTheme.typography.titleLarge)
-            Text("Optional Gemini integration is planned for a later milestone. The offline app does not require an API key.")
-            Spacer(Modifier.height(8.dp))
-            Text("NUR Material 3 • 0.1.0", style = MaterialTheme.typography.labelMedium)
-            Text("Made by NSHD", style = MaterialTheme.typography.labelSmall)
-        }
-    }
-}
-
-@Composable
-private fun SettingToggle(title: String, description: String, value: Boolean, onChange: (Boolean) -> Unit) {
-    ElevatedCard(Modifier.fillMaxWidth()) {
-        Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(title, style = MaterialTheme.typography.titleMedium)
-                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            Switch(checked = value, onCheckedChange = onChange)
+            if (showGuide && requestedRoute.isBlank()) NurFeatureGuide(onDismiss = {
+                activity.getSharedPreferences("nur_onboarding", Context.MODE_PRIVATE).edit().putBoolean("guide_seen", true).apply()
+                showGuide = false
+            })
         }
     }
 }

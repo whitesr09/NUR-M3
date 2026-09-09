@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">نُور</string>
+    <string name="accessibility_title">إمكانية الوصول</string>
+    <string name="accessibility_subtitle">اجعل القراءة والاستخدام أكثر راحة</string>
+    <string name="accessibility_language">اللغة</string>
+    <string name="accessibility_text_size">حجم النص</string>
+    <string name="accessibility_contrast">تباين عالٍ</string>
+    <string name="accessibility_motion">تقليل الحركة</string>
+    <string name="accessibility_hints">إظهار التلميحات</string>
+    <string name="accessibility_preview">معاينة القراءة</string>
+    <string name="accessibility_system">لغة النظام</string>
+    <string name="accessibility_english">الإنجليزية</string>
+    <string name="accessibility_malayalam">المالايالامية</string>
+    <string name="accessibility_arabic">العربية</string>
+    <string name="accessibility_save">حفظ</string>
+    <string name="accessibility_review_note">تتوفر ترجمات مراجعة لبعض عناصر الميزات الجديدة فقط. ترجمة التطبيق بالكامل لم تكتمل بعد.</string>
+    <string name="widget_description">نور: التقدم اليومي والاختصارات</string>
+    <string name="widget_prayer_description">تقدم قائمة الصلوات</string>
+    <string name="widget_task_description">تقدم مهام الأمانة</string>
+    <string name="widget_quick_description">اختصارات المهام والذكر والتركيز</string>
+</resources>
