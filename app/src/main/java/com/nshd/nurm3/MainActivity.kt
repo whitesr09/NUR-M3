@@ -58,7 +58,7 @@ class MainActivity : ComponentActivity() {
                         val next = authResult; authResult = null; next?.invoke(true, "")
                     }
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        val next = authResult; authResult = null; next?.invoke(false, error.message ?: "Authentication unavailable")
+                        val next = authResult; authResult = null; next?.invoke(false, errString.toString())
                     }
                 })
             } catch (error: Exception) {
@@ -139,7 +139,7 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
                     NavHost(navController = nav, startDestination = "journey", modifier = Modifier.fillMaxSize().padding(padding), enterTransition = { enter }, exitTransition = { exit }, popEnterTransition = { enter }, popExitTransition = { exit }) {
                         composable("journey") { DailyJourneyScreen(entries, completions, today, prefs, model, navigate) }
                         composable("amanah") { EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model) }
-                        composable("muhasaba") { EntryScreen("Muhasaba", "Reflect on your day", NurKind.MUHASABA, entries, completions, today, model) }
+                        composable("muhasaba") { EntryScreen("Muhasaba", "Reflect", NurKind.MUHASABA, entries, completions, today, model) }
                         composable("rhythm") { EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model) }
                         composable("history") { HistoryScreen(allEntries, completions) }
                         composable("settings") { PowerSettingsScreen(prefs, model, navigate, lock) }

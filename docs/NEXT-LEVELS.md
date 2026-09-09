@@ -40,14 +40,23 @@ The user requested a substantial visual and usability improvement, especially fo
 
 This is a substantial core-interface pass, not a claim that every feature screen is finished. Dhikr, Quran reader, privacy, backup and other companion-specific screens still need their own detailed layout/accessibility passes, shared component adoption and final device review. Existing working data and feature logic should be preserved during those passes.
 
+## Level 0.10: Quran reader polish and integration correction — source committed, unverified
+
+- Continued from the completed 0.9 staging commit, retaining the shared NUR design system and all existing records.
+- Reworked the Quran reader with consistent panels, a clearer reading hierarchy, responsive search, empty-state recovery, larger Arabic line spacing, explicit meaning summaries and an accessible source action.
+- Kept exact passage IDs and the existing source URLs. No new religious text or unverified quotations were added.
+- Preserved direct navigation to a selected passage and reduced-motion-aware expansion. Browser launch failures now provide visible feedback instead of silently failing.
+- Corrected the platform biometric authentication error callback to use its actual error message, removing a source-level compilation error introduced during the 0.9 UI integration.
+- No database schema, backup format, application ID, versionCode or signing configuration was changed.
+
 ### Deferred verification
 
-No APK build, Gradle compilation, unit-test execution, instrumentation run or device installation was performed for level 0.9. The new source and tests are not yet verified as compiling. Final integration must check the complete source graph, Room migrations 1-to-2-to-3, backup versions 1/2/3, archive/restore and checkbox races, large text and 320dp layouts, edge-to-edge/keyboard behavior, reduced motion, TalkBack semantics and signing compatibility. New code must not be called release-ready merely because it is committed.
+No APK build, Gradle compilation, unit-test execution, instrumentation run or device installation was performed for levels 0.9 or 0.10. The new source and tests are not yet verified as compiling. Final integration must check the complete source graph, Room migrations 1-to-2-to-3, backup versions 1/2/3, archive/restore and checkbox races, large text and 320dp layouts, edge-to-edge/keyboard behavior, reduced motion, TalkBack semantics and signing compatibility. New code must not be called release-ready merely because it is committed.
 
-The application ID, existing versionCode, stable development signing identity, Room version 3 and backup version 3 were not changed by this level. Do not uninstall an existing installation to work around migration or signing errors. A production signing key must remain owner-controlled and private.
+The application ID, existing versionCode, stable development signing identity, Room version 3 and backup version 3 are unchanged. Do not uninstall an existing installation to work around migration or signing errors. A production signing key must remain owner-controlled and private.
 
 ## Remaining levels
 
 Continue focused visual polish, verified Islamic content and Hadith review, optional NUR AI, notification scheduling, accessibility/localization, privacy and backup hardening, widget behavior, advanced productivity tools and final integration. Inspect existing implementations before changes to avoid duplicating working features. Each level receives separate source commits and review.
 
-The final build gate includes compilation, unit tests, migration and backup-restore tests, APK signing verification and installation testing. Existing user data must not be erased to work around a signing or migration problem. No feature is considered release-ready merely because source has been committed.
+The final build gate includes compilation, unit tests, migration and backup-restore tests, APK signing verification and installation testing. Existing user data must not be erased to work around a signing or migration problem. No feature is considered release-ready merely because source is committed.
