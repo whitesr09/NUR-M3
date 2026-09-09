@@ -103,7 +103,7 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
     val activity = androidx.compose.ui.platform.LocalContext.current as MainActivity
     val nav = rememberNavController()
     val current = nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey"
-    val auxiliary = setOf("settings", "appearance", "layout", "insights", "backup", "privacy")
+    val auxiliary = setOf("settings", "appearance", "layout", "insights", "backup", "privacy", "reflections")
     SideEffect {
         if (locked || prefs.privatePreview) activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
@@ -136,6 +136,7 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
                                     "insights" -> "Insights"
                                     "backup" -> "Backup & restore"
                                     "privacy" -> "Privacy"
+                                    "reflections" -> "Quran Reflections"
                                     else -> tabs.firstOrNull { it.route == current }?.label ?: "NUR"
                                 }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
                                 if (current == "journey") Text(today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")), style = MaterialTheme.typography.labelSmall)
@@ -163,6 +164,7 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
                     composable("insights") { InsightsScreen(allEntries, completions, today) }
                     composable("backup") { BackupScreen() }
                     composable("privacy") { PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) } }
+                    composable("reflections") { ReflectionScreen() }
                 }
             }
         }
