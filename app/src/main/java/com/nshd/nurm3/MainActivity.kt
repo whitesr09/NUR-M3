@@ -9,6 +9,7 @@ import android.os.CancellationSignal
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.EnterTransition
@@ -17,19 +18,15 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.*
 import com.nshd.nurm3.data.*
 import com.nshd.nurm3.ui.*
-import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
 
 class MainActivity : ComponentActivity() {
     private val model: NurViewModel by viewModels()
@@ -74,6 +71,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         setContent { NurApp(model, lock, ::authenticateDevice) }
     }
@@ -82,16 +80,6 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() { authResult = null; super.onDestroy() }
 }
 
-private data class Tab(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
-private val tabs = listOf(
-    Tab("journey", "Journey", Icons.Default.Home),
-    Tab("amanah", "Amanah", Icons.Default.Checklist),
-    Tab("muhasaba", "Reflect", Icons.Default.EditNote),
-    Tab("rhythm", "Rhythm", Icons.Default.Repeat),
-    Tab("history", "History", Icons.Default.History)
-)
-
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) -> Unit) -> Unit) {
     val prefs by model.preferences.collectAsStateWithLifecycle()
@@ -103,19 +91,22 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
     val activity = androidx.compose.ui.platform.LocalContext.current as MainActivity
     val nav = rememberNavController()
     val current = nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey"
-    val auxiliary = setOf("settings", "appearance", "layout", "insights", "backup", "privacy", "dhikr", "reflections?verse={verse}")
+    val snackbar = remember { SnackbarHostState() }
     SideEffect {
         if (locked || prefs.privatePreview) activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
     }
     LaunchedEffect(Unit) { while (true) { model.refreshDate(); delay(30_000) } }
+    LaunchedEffect(model, locked) {
+        if (!locked) model.uiEvents.collectLatest { snackbar.showSnackbar(it) }
+    }
     NurTheme(prefs) {
         if (locked) {
             LockScreen(lock, authenticate)
         } else {
             val navigate: (String) -> Unit = { route ->
                 if (route != current) {
-                    if (route in tabs.map { it.route }) nav.navigate(route) {
+                    if (route in NurMainTabs.map { it.route }) nav.navigate(route) {
                         popUpTo(nav.graph.startDestinationId) { saveState = true }
                         launchSingleTop = true
                         restoreState = true
@@ -125,33 +116,13 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
             val enter = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(220))
             val exit = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(120))
             Scaffold(
-                topBar = {
-                    TopAppBar(
-                        title = {
-                            Column {
-                                Text(if (current == "journey") "نُور" else when (current) {
-                                    "appearance" -> "Appearance Studio"
-                                    "layout" -> "Customize Journey"
-                                    "settings" -> "Settings"
-                                    "insights" -> "Insights"
-                                    "backup" -> "Backup & restore"
-                                    "privacy" -> "Privacy"
-                                    "dhikr" -> "Dhikr"
-                                    "reflections?verse={verse}" -> "Quran Reflections"
-                                    else -> tabs.firstOrNull { it.route == current }?.label ?: "NUR"
-                                }, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.primary)
-                                if (current == "journey") Text(today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM")), style = MaterialTheme.typography.labelSmall)
-                            }
-                        },
-                        navigationIcon = { if (current in auxiliary) IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back") } },
-                        actions = { if (current !in auxiliary) IconButton(onClick = { navigate("settings") }) { Icon(Icons.Default.Settings, contentDescription = "Settings") } }
-                    )
-                },
-                bottomBar = {
-                    if (current in tabs.map { it.route }) NavigationBar {
-                        tabs.forEach { tab -> NavigationBarItem(selected = current == tab.route, onClick = { navigate(tab.route) }, icon = { Icon(tab.icon, contentDescription = null) }, label = { Text(tab.label) }, alwaysShowLabel = false) }
-                    }
-                }
+                containerColor = MaterialTheme.colorScheme.background,
+                contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                topBar = { NurTopBar(current, today, onBack = {
+                    if (!nav.popBackStack()) navigate("journey")
+                }, onSettings = { navigate("settings") }) },
+                bottomBar = { if (current in NurMainTabs.map { it.route }) NurBottomBar(current, navigate) },
+                snackbarHost = { SnackbarHost(snackbar) }
             ) { padding ->
                 NavHost(navController = nav, startDestination = "journey", modifier = Modifier.fillMaxSize().padding(padding), enterTransition = { enter }, exitTransition = { exit }, popEnterTransition = { enter }, popExitTransition = { exit }) {
                     composable("journey") { DailyJourneyScreen(entries, completions, today, prefs, model, navigate) }
