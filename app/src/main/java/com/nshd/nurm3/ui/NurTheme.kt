@@ -5,6 +5,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
@@ -15,8 +16,11 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.nshd.nurm3.data.AdvancedSettings
 import com.nshd.nurm3.data.NurFontStore
 import com.nshd.nurm3.data.NurPreferences
+import com.nshd.nurm3.data.VisualPreferences
 
 private val Night = Color(0xFF0B131B)
 private val NightSurface = Color(0xFF111C25)
@@ -57,6 +61,7 @@ private fun amoledScheme(base: ColorScheme): ColorScheme = base.copy(
 @Composable
 fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
     val context = LocalContext.current
+    val visual by remember(context) { AdvancedSettings(context.applicationContext) }.preferences.collectAsStateWithLifecycle(initialValue = VisualPreferences())
     val dark = when (prefs.themeMode) {
         "light" -> false
         "system" -> isSystemInDarkTheme()
@@ -122,8 +127,12 @@ fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
     CompositionLocalProvider(
         LocalNurCompact provides prefs.compactCards,
         LocalNurReduceMotion provides prefs.reduceMotion,
-        LocalNurProgressStyle provides prefs.progressStyle
+        LocalNurProgressStyle provides prefs.progressStyle,
+        LocalNurVisual provides visual,
+        LocalNurGlass provides visual.glass
     ) {
-        MaterialTheme(colorScheme = scheme, typography = typography(prefs.typeScale, family), shapes = shapes, content = content)
+        NurAdvancedMotion(visual) {
+            MaterialTheme(colorScheme = scheme, typography = typography(prefs.typeScale, family), shapes = shapes, content = content)
+        }
     }
 }
