@@ -17,10 +17,12 @@ import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.*
 import com.nshd.nurm3.data.*
@@ -56,7 +58,7 @@ class MainActivity : ComponentActivity() {
                         val next = authResult; authResult = null; next?.invoke(true, "")
                     }
                     override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        val next = authResult; authResult = null; next?.invoke(false, errString.toString())
+                        val next = authResult; authResult = null; next?.invoke(false, error.message ?: "Authentication unavailable")
                     }
                 })
             } catch (error: Exception) {
@@ -92,9 +94,18 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
     val nav = rememberNavController()
     val current = nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey"
     val snackbar = remember { SnackbarHostState() }
+    val dark = when (prefs.themeMode) {
+        "light" -> false
+        "system" -> isSystemInDarkTheme()
+        else -> true
+    }
     SideEffect {
         if (locked || prefs.privatePreview) activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         else activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        WindowInsetsControllerCompat(activity.window, activity.window.decorView).apply {
+            isAppearanceLightStatusBars = !dark
+            isAppearanceLightNavigationBars = !dark
+        }
     }
     LaunchedEffect(Unit) { while (true) { model.refreshDate(); delay(30_000) } }
     LaunchedEffect(model, locked) {
@@ -104,41 +115,43 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
         if (locked) {
             LockScreen(lock, authenticate)
         } else {
-            val navigate: (String) -> Unit = { route ->
-                if (route != current) {
-                    if (route in NurMainTabs.map { it.route }) nav.navigate(route) {
-                        popUpTo(nav.graph.startDestinationId) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    } else nav.navigate(route) { launchSingleTop = true }
+            CompositionLocalProvider(LocalNurSnackbarHost provides snackbar) {
+                val navigate: (String) -> Unit = { route ->
+                    if (route != current) {
+                        if (route in NurMainTabs.map { it.route }) nav.navigate(route) {
+                            popUpTo(nav.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        } else nav.navigate(route) { launchSingleTop = true }
+                    }
                 }
-            }
-            val enter = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(220))
-            val exit = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(120))
-            Scaffold(
-                containerColor = MaterialTheme.colorScheme.background,
-                contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                topBar = { NurTopBar(current, today, onBack = {
-                    if (!nav.popBackStack()) navigate("journey")
-                }, onSettings = { navigate("settings") }) },
-                bottomBar = { if (current in NurMainTabs.map { it.route }) NurBottomBar(current, navigate) },
-                snackbarHost = { SnackbarHost(snackbar) }
-            ) { padding ->
-                NavHost(navController = nav, startDestination = "journey", modifier = Modifier.fillMaxSize().padding(padding), enterTransition = { enter }, exitTransition = { exit }, popEnterTransition = { enter }, popExitTransition = { exit }) {
-                    composable("journey") { DailyJourneyScreen(entries, completions, today, prefs, model, navigate) }
-                    composable("amanah") { EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model) }
-                    composable("muhasaba") { EntryScreen("Muhasaba", "Reflect on your day", NurKind.MUHASABA, entries, completions, today, model) }
-                    composable("rhythm") { EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model) }
-                    composable("history") { HistoryScreen(allEntries, completions) }
-                    composable("settings") { PowerSettingsScreen(prefs, model, navigate, lock) }
-                    composable("appearance") { AppearanceStudio(prefs, model) }
-                    composable("layout") { JourneyStudio(prefs.journey, model) }
-                    composable("insights") { InsightsScreen(allEntries, completions, today) }
-                    composable("backup") { BackupScreen() }
-                    composable("privacy") { PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) } }
-                    composable("dhikr") { DhikrScreen(model, prefs, today) }
-                    composable("reflections?verse={verse}", arguments = listOf(androidx.navigation.navArgument("verse") { type = androidx.navigation.NavType.StringType; defaultValue = "" })) { entry ->
-                        ReflectionScreen(entry.arguments?.getString("verse"))
+                val enter = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(220))
+                val exit = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(120))
+                Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    contentWindowInsets = WindowInsets(0, 0, 0, 0),
+                    topBar = { NurTopBar(current, today, onBack = {
+                        if (!nav.popBackStack()) navigate("journey")
+                    }, onSettings = { navigate("settings") }) },
+                    bottomBar = { if (current in NurMainTabs.map { it.route }) NurBottomBar(current, navigate) },
+                    snackbarHost = { SnackbarHost(snackbar) }
+                ) { padding ->
+                    NavHost(navController = nav, startDestination = "journey", modifier = Modifier.fillMaxSize().padding(padding), enterTransition = { enter }, exitTransition = { exit }, popEnterTransition = { enter }, popExitTransition = { exit }) {
+                        composable("journey") { DailyJourneyScreen(entries, completions, today, prefs, model, navigate) }
+                        composable("amanah") { EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model) }
+                        composable("muhasaba") { EntryScreen("Muhasaba", "Reflect on your day", NurKind.MUHASABA, entries, completions, today, model) }
+                        composable("rhythm") { EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model) }
+                        composable("history") { HistoryScreen(allEntries, completions) }
+                        composable("settings") { PowerSettingsScreen(prefs, model, navigate, lock) }
+                        composable("appearance") { AppearanceStudio(prefs, model) }
+                        composable("layout") { JourneyStudio(prefs.journey, model) }
+                        composable("insights") { InsightsScreen(allEntries, completions, today) }
+                        composable("backup") { BackupScreen() }
+                        composable("privacy") { PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) } }
+                        composable("dhikr") { DhikrScreen(model, prefs, today) }
+                        composable("reflections?verse={verse}", arguments = listOf(androidx.navigation.navArgument("verse") { type = androidx.navigation.NavType.StringType; defaultValue = "" })) { entry ->
+                            ReflectionScreen(entry.arguments?.getString("verse"))
+                        }
                     }
                 }
             }
