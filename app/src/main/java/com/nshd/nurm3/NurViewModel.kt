@@ -6,7 +6,9 @@ import androidx.lifecycle.viewModelScope
 import com.nshd.nurm3.data.*
 import com.nshd.nurm3.ui.JourneyLayout
 import java.time.LocalDate
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -26,6 +28,12 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     val dhikrSnapshots = today.flatMapLatest { dhikrRepo.snapshots(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val completionGate = CompletionGate()
+    private val _completionPending = MutableStateFlow<Set<String>>(emptySet())
+    val completionPending: StateFlow<Set<String>> = _completionPending.asStateFlow()
+    private val _uiEvents = MutableSharedFlow<String>(extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    val uiEvents: SharedFlow<String> = _uiEvents.asSharedFlow()
+
     init {
         viewModelScope.launch {
             val dao = database.dao()
@@ -42,7 +50,31 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun add(kind: String, title: String) = viewModelScope.launch { repo.add(kind, title, entries.value.size, today.value) }
     fun addEntry(entry: Entry) = viewModelScope.launch { repo.saveNew(entry.copy(position = entries.value.size)) }
     fun updateEntry(entry: Entry) = viewModelScope.launch { repo.updateEntry(entry) }
-    fun complete(id: String, date: LocalDate, checked: Boolean) = viewModelScope.launch { repo.setCompleted(id, date, checked) }
+
+    /** Persist first; the database flow is the only authority for a checked state. */
+    fun complete(id: String, date: LocalDate, checked: Boolean) {
+        val key = completionGate.key(id, date)
+        if (!completionGate.acquire(key)) return
+        _completionPending.update { it + key }
+        viewModelScope.launch {
+            try {
+                if (date != LocalDate.now()) {
+                    refreshDate()
+                    _uiEvents.emit("The day changed. Refreshing today's checklist.")
+                } else if (!repo.setCompleted(id, date, checked)) {
+                    _uiEvents.emit("This entry is no longer scheduled for today.")
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _uiEvents.emit("Could not save. Your previous completion is unchanged.")
+            } finally {
+                completionGate.release(key)
+                _completionPending.update { it - key }
+            }
+        }
+    }
+
     fun delete(id: String) = viewModelScope.launch { repo.delete(id) }
     fun setting(key: String, value: Boolean) = viewModelScope.launch { settings.update(key, value) }
     fun choice(key: String, value: String) = viewModelScope.launch { settings.updateChoice(key, value) }
