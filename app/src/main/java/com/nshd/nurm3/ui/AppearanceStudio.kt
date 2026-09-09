@@ -1,10 +1,8 @@
 package com.nshd.nurm3.ui
 
-import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -54,7 +52,7 @@ fun AppearanceStudio(prefs: NurPreferences, model: NurViewModel, refreshStatus: 
             AppearanceSection("Theme & colors") {
                 NurAppearanceLink(Icons.Default.Palette, "Theme mode", modes.firstOrNull { it.id == prefs.themeMode }?.label ?: "Dark") { picker = "theme" }
                 NurAppearanceLink(Icons.Default.ColorLens, "Color palette", if (prefs.dynamicColor) "Dynamic wallpaper colors" else prefs.palette.replaceFirstChar { it.uppercase() }) { picker = "palette" }
-                NurSettingRow("Dynamic colors", "Use wallpaper colors on Android 12 or newer", prefs.dynamicColor, Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) { model.setting("dynamic", it) }
+                NurSettingRow("Dynamic colors", "Use wallpaper colors on Android 12 or newer", prefs.dynamicColor, android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) { model.setting("dynamic", it) }
             }
         }
         item {

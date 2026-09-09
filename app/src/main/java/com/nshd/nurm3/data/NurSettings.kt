@@ -107,28 +107,21 @@ class NurSettings(private val context: Context) {
     suspend fun updateChoice(key: String, value: String) {
         context.nurDataStore.edit { p ->
             when (key) {
-                "mode" -> if (value in AppearanceChoices.modes) {
-                    p[mode] = value; p[dark] = value != "light"
-                }
-                "palette" -> if (value in listOf("gold", "ocean", "sage", "rose")) {
-                    p[palette] = value; p[gold] = value == "gold"
-                }
+                "mode" -> if (value in AppearanceChoices.modes) { p[mode] = value; p[dark] = value != "light" }
+                "palette" -> if (value in listOf("gold", "ocean", "sage", "rose")) { p[palette] = value; p[gold] = value == "gold" }
                 "progress_style" -> if (value in AppearanceChoices.progressStyles) p[progressStyle] = value
             }
         }
     }
-
     suspend fun updateScale(value: Float) {
         context.nurDataStore.edit { it[scale] = if (value.isFinite()) value.coerceIn(0.85f, 1.2f) else 1f }
     }
-
     suspend fun saveJourney(layout: JourneyLayout) {
         context.nurDataStore.edit { p ->
             p[order] = layout.order.joinToString(",")
             p[hidden] = layout.hidden.joinToString(",")
         }
     }
-
     suspend fun resetAppearance() {
         context.nurDataStore.edit { p ->
             listOf(dark, dynamic, gold, motion, arabic, compact, shapes, highRefreshRate).forEach { p.remove(it) }

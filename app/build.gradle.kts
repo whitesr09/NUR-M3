@@ -8,16 +8,14 @@ plugins {
 android {
     namespace = "com.nshd.nurm3"
     compileSdk = 35
-
     defaultConfig {
         applicationId = "com.nshd.nurm3"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 5
+        versionName = "0.12.0-preview.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
-
     signingConfigs {
         create("nurStableDebug") {
             storeFile = file("keystores/nur-m3-test.jks")
@@ -38,17 +36,13 @@ android {
             }
         }
     }
-
     buildTypes {
-        debug {
-            signingConfig = signingConfigs.getByName("nurStableDebug")
-        }
+        debug { signingConfig = signingConfigs.getByName("nurStableDebug") }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("nurRelease")
         }
     }
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

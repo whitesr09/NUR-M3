@@ -2,20 +2,12 @@ package com.nshd.nurm3
 
 import android.view.Display
 
-/** Pure policy keeps a display's resolution and selects a reported mode at or below 120 Hz. */
-data class RefreshCandidate(val id: Int, val width: Int, val height: Int, val rate: Float)
-
+/** Requests only modes the display reports, retaining the current resolution. */
 object RefreshRatePolicy {
-    fun choose(candidates: List<RefreshCandidate>, current: RefreshCandidate, ceiling: Float = 120f): RefreshCandidate? {
-        return candidates.asSequence()
-            .filter { it.width == current.width && it.height == current.height }
-            .filter { it.rate.isFinite() && it.rate > 0f && it.rate <= ceiling + 0.1f }
-            .maxWithOrNull(compareBy<RefreshCandidate> { it.rate }.thenBy { if (it.id == current.id) 1 else 0 })
-    }
-
     fun choose(modes: Array<Display.Mode>, current: Display.Mode, ceiling: Float = 120f): Display.Mode? {
-        fun Display.Mode.candidate() = RefreshCandidate(modeId, physicalWidth, physicalHeight, refreshRate)
-        val selected = choose(modes.map { it.candidate() }, current.candidate(), ceiling) ?: return null
-        return modes.firstOrNull { it.modeId == selected.id }
+        return modes.asSequence()
+            .filter { it.physicalWidth == current.physicalWidth && it.physicalHeight == current.physicalHeight }
+            .filter { it.refreshRate.isFinite() && it.refreshRate > 0f && it.refreshRate <= ceiling + 0.1f }
+            .maxWithOrNull(compareBy<Display.Mode> { it.refreshRate }.thenBy { if (it.modeId == current.modeId) 1 else 0 })
     }
 }

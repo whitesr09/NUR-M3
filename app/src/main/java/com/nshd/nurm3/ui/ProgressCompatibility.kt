@@ -8,7 +8,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import java.time.LocalDate
 
-/** Compatibility bridge for the existing determinate rings. Indeterminate indicators remain Material3. */
 @Composable
 fun CircularProgressIndicator(
     progress: () -> Float,
@@ -17,8 +16,5 @@ fun CircularProgressIndicator(
     strokeWidth: Dp = 4.dp,
     trackColor: Color = MaterialTheme.colorScheme.surfaceVariant
 ) {
-    NurCircularProgress(
-        target = progress(), date = LocalDate.MIN, label = "Progress",
-        modifier = modifier, strokeWidth = strokeWidth, color = color, trackColor = trackColor
-    )
+    NurCircularProgress(target = progress(), date = LocalDate.MIN, label = "Progress", modifier = modifier, strokeWidth = strokeWidth, color = color, trackColor = trackColor)
 }

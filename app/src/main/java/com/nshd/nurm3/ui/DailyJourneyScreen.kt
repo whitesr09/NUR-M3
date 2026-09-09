@@ -27,21 +27,15 @@ fun DailyJourneyScreen(entries: List<Entry>, completions: List<Completion>, toda
     val prayerEntries = active.filter { it.kind == NurKind.PRAYER }
     val prayersDone = prayerEntries.count { it.id in done }
     LazyColumn(contentPadding = PaddingValues(NurDesign.pagePadding), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-        item {
-            NurPageHeading("Your space", "Your Daily Journey", "A meaningful day, one step at a time.", action = {
-                IconButton(onClick = { navigate("layout") }, modifier = Modifier.size(48.dp)) {
-                    Icon(Icons.Default.Tune, contentDescription = "Customize Journey")
-                }
-            })
-        }
+        item { NurPageHeading("Your space", "Your Daily Journey", "A meaningful day, one step at a time.", action = {
+            IconButton(onClick = { navigate("layout") }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Tune, contentDescription = "Customize Journey") }
+        }) }
         items(prefs.journey.visible(), key = { it }) { id ->
             when (id) {
                 JourneyCard.LIGHT -> DailyLightCard(summary, prayersDone, today, prefs)
                 JourneyCard.PRAYERS -> SectionCard("Your prayers", "$prayersDone of 5 completed", null) {
                     if (prayerEntries.isEmpty()) Text("Loading your prayer checklist…", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    prayerEntries.forEach { entry ->
-                        ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today, pending = CompletionGate.key(entry.id, today) in pending)
-                    }
+                    prayerEntries.forEach { entry -> ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today, pending = CompletionGate.key(entry.id, today) in pending) }
                 }
                 JourneyCard.AMANAH, JourneyCard.MUHASABA, JourneyCard.RHYTHM -> {
                     val section = active.filter { it.kind == id }
@@ -50,9 +44,7 @@ fun DailyJourneyScreen(entries: List<Entry>, completions: List<Completion>, toda
                         if (section.isEmpty()) Text("Nothing scheduled today. Your saved entries are still available.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         else {
                             NurLinearProgress(count.toFloat() / section.size, today, "${JourneyCard.titles[id] ?: id} progress")
-                            section.take(3).forEach { entry ->
-                                ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today, pending = CompletionGate.key(entry.id, today) in pending)
-                            }
+                            section.take(3).forEach { entry -> ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today, pending = CompletionGate.key(entry.id, today) in pending) }
                             if (section.size > 3) TextButton(onClick = { navigate(id) }) { Text("View all ${section.size} entries") }
                         }
                     }
@@ -95,9 +87,7 @@ private fun DailyLightCard(summary: ProgressSummary, prayersDone: Int, today: Lo
                 NurCircularProgress(prayersDone / 5f, today, "Prayer ring", modifier = Modifier.size(194.dp), strokeWidth = 3.dp, color = scheme.primary.copy(alpha = 0.7f), trackColor = scheme.surfaceVariant.copy(alpha = 0.45f))
                 NurCircularProgress(target, today, "Daily Light ring", modifier = Modifier.size(158.dp), strokeWidth = 10.dp, color = scheme.primary, trackColor = scheme.surfaceVariant.copy(alpha = 0.65f))
                 listOf(Alignment.TopCenter, Alignment.BottomCenter, Alignment.CenterStart, Alignment.CenterEnd).forEach { alignment ->
-                    Box(Modifier.fillMaxSize(), contentAlignment = alignment) {
-                        Icon(Icons.Default.Star, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp))
-                    }
+                    Box(Modifier.fillMaxSize(), contentAlignment = alignment) { Icon(Icons.Default.Star, contentDescription = null, tint = scheme.primary, modifier = Modifier.size(12.dp)) }
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(3.dp)) {
                     Text("الله", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold, color = scheme.primary)
@@ -127,9 +117,7 @@ fun SectionCard(title: String, subtitle: String, onOpen: (() -> Unit)?, content:
                 Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            if (onOpen != null) IconButton(onClick = onOpen, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Default.ChevronRight, contentDescription = "Open $title", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
+            if (onOpen != null) IconButton(onClick = onOpen, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.ChevronRight, contentDescription = "Open $title", tint = MaterialTheme.colorScheme.onSurfaceVariant) }
         }
         content()
     }

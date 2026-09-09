@@ -4,7 +4,6 @@ import android.content.Context
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
-import android.view.Display
 import android.view.Window
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -22,26 +21,15 @@ class NurRefreshController(private val window: Window, context: Context) : Defau
     private var resumed = false
     private val _status = MutableStateFlow("System controlled")
     val status = _status.asStateFlow()
-
     private val listener = object : DisplayManager.DisplayListener {
         override fun onDisplayAdded(displayId: Int) = updateStatus()
         override fun onDisplayRemoved(displayId: Int) = updateStatus()
         override fun onDisplayChanged(displayId: Int) = updateStatus()
     }
-
     init { manager.registerDisplayListener(listener, handler) }
-
-    fun setEnabled(enabled: Boolean) {
-        requested = enabled
-        apply()
-    }
-
+    fun setEnabled(enabled: Boolean) { requested = enabled; apply() }
     private fun apply() {
-        if (!resumed || !requested) {
-            restore()
-            updateStatus()
-            return
-        }
+        if (!resumed || !requested) { restore(); updateStatus(); return }
         val display = window.decorView.display
         if (display == null) { _status.value = "Display information unavailable"; return }
         val choice = RefreshRatePolicy.choose(display.supportedModes, display.mode)
@@ -52,14 +40,12 @@ class NurRefreshController(private val window: Window, context: Context) : Defau
         window.attributes = attributes
         updateStatus()
     }
-
     private fun restore() {
         val attributes = window.attributes
         attributes.preferredDisplayModeId = originalMode
         attributes.preferredRefreshRate = originalRate
         window.attributes = attributes
     }
-
     private fun updateStatus() {
         val display = window.decorView.display ?: return
         val current = display.refreshRate
@@ -69,7 +55,6 @@ class NurRefreshController(private val window: Window, context: Context) : Defau
             "Requested ${format(available)} Hz · Display reports ${format(current)} Hz"
         } else "System controlled · Display reports ${format(current)} Hz"
     }
-
     private fun format(value: Float) = String.format(Locale.US, "%.1f", value)
     override fun onResume(owner: LifecycleOwner) { resumed = true; apply() }
     override fun onPause(owner: LifecycleOwner) { resumed = false; restore(); updateStatus() }

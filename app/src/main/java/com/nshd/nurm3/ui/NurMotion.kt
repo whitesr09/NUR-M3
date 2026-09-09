@@ -12,10 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -32,14 +30,11 @@ import kotlin.math.cos
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-/** Motion and visual styles never alter saved counts or progress calculations. */
 val LocalNurReduceMotion = staticCompositionLocalOf { false }
-
 object NurMotion {
     fun fraction(value: Float): Float = if (value.isFinite()) value.coerceIn(0f, 1f) else 0f
     fun percent(value: Float): Int = (fraction(value) * 100f).roundToInt().coerceIn(0, 100)
 }
-
 @Composable
 fun rememberNurProgress(target: Float, date: LocalDate, label: String): Float {
     val value = NurMotion.fraction(target)
@@ -51,18 +46,15 @@ fun rememberNurProgress(target: Float, date: LocalDate, label: String): Float {
     }
     return state.value
 }
-
-private fun wavePath(width: Float, center: Float, amplitude: Float, cycles: Float, end: Float, phase: Float = 0f): Path = Path().apply {
+private fun wavePath(width: Float, center: Float, amplitude: Float, cycles: Float, end: Float): Path = Path().apply {
     moveTo(0f, center)
     val steps = 80
     for (i in 1..steps) {
         val x = end * i / steps
-        val y = center + sin(2.0 * PI * cycles * x / width + phase).toFloat() * amplitude
+        val y = center + sin(2.0 * PI * cycles * x / width).toFloat() * amplitude
         lineTo(x, y)
     }
 }
-
-/** One shared renderer for all progress bars, including dashboard and history. */
 @Composable
 fun NurLinearProgress(target: Float, date: LocalDate, label: String, modifier: Modifier = Modifier, style: String = LocalNurProgressStyle.current) {
     val value = NurMotion.fraction(target)
@@ -82,8 +74,7 @@ fun NurLinearProgress(target: Float, date: LocalDate, label: String, modifier: M
             val path = wavePath(size.width, y, amplitude, cycles, size.width)
             drawPath(path, scheme.surfaceVariant, style = Stroke(stroke.toPx(), cap = StrokeCap.Round))
             if (animated > 0f) {
-                val end = size.width * animated
-                val filled = wavePath(size.width, y, amplitude, cycles, end)
+                val filled = wavePath(size.width, y, amplitude, cycles, size.width * animated)
                 drawPath(filled, scheme.primary, style = Stroke(stroke.toPx(), cap = StrokeCap.Round))
             }
         }
@@ -94,8 +85,6 @@ fun NurLinearProgress(target: Float, date: LocalDate, label: String, modifier: M
         }
     }
 }
-
-/** Ring styles share the selected stroke weight; the wavy styles follow a smooth radial path. */
 @Composable
 fun NurCircularProgress(target: Float, date: LocalDate, label: String, modifier: Modifier = Modifier, strokeWidth: Dp = 9.dp, style: String = LocalNurProgressStyle.current, color: Color = MaterialTheme.colorScheme.primary, trackColor: Color = MaterialTheme.colorScheme.surfaceVariant) {
     val value = NurMotion.fraction(target)

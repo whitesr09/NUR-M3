@@ -19,14 +19,12 @@ private val NightSurface = Color(0xFF111C25)
 private val Light = Color(0xFFF7F7F4)
 val LocalNurCompact = staticCompositionLocalOf { false }
 val LocalNurProgressStyle = staticCompositionLocalOf { "slim" }
-
 private fun paletteColor(name: String, dark: Boolean): Color = when (name) {
     "ocean" -> if (dark) Color(0xFFA9CEE8) else Color(0xFF315D78)
     "sage" -> if (dark) Color(0xFFADD1B9) else Color(0xFF3C6751)
     "rose" -> if (dark) Color(0xFFE7B9C6) else Color(0xFF8B465D)
     else -> if (dark) NurDesign.gold else Color(0xFF806017)
 }
-
 private fun typography(scale: Float): Typography {
     val base = Typography()
     fun TextStyle.scaled() = copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
@@ -44,8 +42,6 @@ private fun typography(scale: Float): Typography {
         labelSmall = base.labelSmall.scaled().copy(letterSpacing = 0.3.sp)
     )
 }
-
-/** AMOLED is a separate, genuinely black surface scheme, not merely a dark accent. */
 private fun amoledScheme(base: ColorScheme): ColorScheme = base.copy(
     background = Color.Black, surface = Color.Black, surfaceTint = Color.Black,
     surfaceContainerLowest = Color.Black, surfaceContainerLow = Color.Black,
@@ -54,7 +50,6 @@ private fun amoledScheme(base: ColorScheme): ColorScheme = base.copy(
     onBackground = Color(0xFFE8EDF0), onSurface = Color(0xFFE8EDF0),
     onSurfaceVariant = Color(0xFFB1BEC6), outlineVariant = Color(0xFF383838)
 )
-
 @Composable
 fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
     val context = LocalContext.current
