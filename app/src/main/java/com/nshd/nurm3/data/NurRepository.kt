@@ -35,10 +35,12 @@ class NurRepository(private val dao: NurDao) {
         dao.saveEntry(entry.copy(id = UUID.randomUUID().toString(), title = entry.title.trim(), archived = false, createdAt = System.currentTimeMillis()))
     }
 
-    suspend fun setCompleted(id: String, date: LocalDate, completed: Boolean) {
-        val entry = dao.getEntry(id) ?: return
-        if (!EntrySchedule.isActive(entry, date)) return
+    /** Returns false when the entry cannot be completed on the selected day. */
+    suspend fun setCompleted(id: String, date: LocalDate, completed: Boolean): Boolean {
+        val entry = dao.getEntry(id) ?: return false
+        if (!EntrySchedule.isActive(entry, date)) return false
         dao.recordCompletion(id, date.toString(), completed, System.currentTimeMillis())
+        return true
     }
 
     suspend fun updateEntry(entry: Entry) {
