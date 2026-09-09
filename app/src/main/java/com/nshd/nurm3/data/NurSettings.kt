@@ -36,7 +36,10 @@ data class NurPreferences(
     val savedJourneyPreset: JourneyPreset? = null,
     val fontStyle: String = "default",
     val customFontId: String = "",
-    val customFontName: String = ""
+    val customFontName: String = "",
+    val glassMode: String = "frosted",
+    val glassIntensity: Float = 0.66f,
+    val glassBlurRadius: Int = 32
 )
 
 object NurFontChoices {
@@ -78,6 +81,9 @@ class NurSettings(private val context: Context) {
     private val fontStyle = stringPreferencesKey("font_style")
     private val customFontId = stringPreferencesKey("custom_font_id")
     private val customFontName = stringPreferencesKey("custom_font_name")
+    private val glassMode = stringPreferencesKey("glass_mode")
+    private val glassIntensity = floatPreferencesKey("glass_intensity")
+    private val glassBlurRadius = intPreferencesKey("glass_blur_radius")
 
     private fun options(p: Preferences) = JourneyOptions.restore(p[cardSizes], p[cardPinned], p[cardCollapsed])
     private fun writeOptions(p: MutablePreferences, value: JourneyOptions) {
@@ -98,6 +104,7 @@ class NurSettings(private val context: Context) {
     val preferences: Flow<NurPreferences> = context.nurDataStore.data.map { p ->
         val selectedMode = AppearanceChoices.mode(p[mode] ?: if (p[dark] ?: true) "dark" else "light")
         val selectedPalette = p[palette]?.takeIf { it in setOf("gold", "ocean", "sage", "rose") } ?: if (p[gold] ?: true) "gold" else "ocean"
+        val selectedGlass = p[glassMode]?.takeIf { it in setOf("off", "subtle", "frosted", "liquid") } ?: "frosted"
         NurPreferences(
             darkMode = selectedMode == "dark" || selectedMode == "amoled" || selectedMode == "system" && (p[dark] ?: true),
             dynamicColor = p[dynamic] ?: false,
@@ -123,7 +130,10 @@ class NurSettings(private val context: Context) {
             savedJourneyPreset = savedPreset(p),
             fontStyle = NurFontChoices.normalize(p[fontStyle]),
             customFontId = p[customFontId].orEmpty().takeIf { it.matches(Regex("[a-f0-9]{64}")) }.orEmpty(),
-            customFontName = p[customFontName].orEmpty().take(100)
+            customFontName = p[customFontName].orEmpty().take(100),
+            glassMode = selectedGlass,
+            glassIntensity = (p[glassIntensity] ?: 0.66f).takeIf { it.isFinite() }?.coerceIn(0.25f, 1f) ?: 0.66f,
+            glassBlurRadius = (p[glassBlurRadius] ?: 32).coerceIn(0, 72)
         )
     }
 
@@ -156,9 +166,19 @@ class NurSettings(private val context: Context) {
                 "palette" -> if (value in listOf("gold", "ocean", "sage", "rose")) { p[palette] = value; p[gold] = value == "gold" }
                 "progress_style" -> if (value in AppearanceChoices.progressStyles) p[progressStyle] = value
                 "font_style" -> if (value in NurFontChoices.styles && (value != "custom" || !p[customFontId].isNullOrBlank())) p[fontStyle] = value
+                "glass_mode" -> if (value in setOf("off", "subtle", "frosted", "liquid")) p[glassMode] = value
             }
         }
     }
+
+    suspend fun updateGlassIntensity(value: Float) {
+        context.nurDataStore.edit { it[glassIntensity] = if (value.isFinite()) value.coerceIn(0.25f, 1f) else 0.66f }
+    }
+
+    suspend fun updateGlassBlurRadius(value: Int) {
+        context.nurDataStore.edit { it[glassBlurRadius] = value.coerceIn(0, 72) }
+    }
+
     suspend fun selectCustomFont(id: String, name: String) {
         require(id.matches(Regex("[a-f0-9]{64}")))
         context.nurDataStore.edit { p ->
@@ -202,8 +222,9 @@ class NurSettings(private val context: Context) {
     suspend fun resetAppearance() {
         context.nurDataStore.edit { p ->
             listOf(dark, dynamic, gold, motion, arabic, compact, shapes, highRefreshRate).forEach { p.remove(it) }
-            listOf(mode, palette, order, hidden, progressStyle, cardSizes, cardPinned, cardCollapsed, fontStyle).forEach { p.remove(it) }
-            p.remove(scale)
+            listOf(mode, palette, order, hidden, progressStyle, cardSizes, cardPinned, cardCollapsed, fontStyle, glassMode).forEach { p.remove(it) }
+            listOf(scale, glassIntensity).forEach { p.remove(it) }
+            p.remove(glassBlurRadius)
         }
     }
 }
