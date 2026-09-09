@@ -51,6 +51,13 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun addEntry(entry: Entry) = viewModelScope.launch { repo.saveNew(entry.copy(position = entries.value.size)) }
     fun updateEntry(entry: Entry) = viewModelScope.launch { repo.updateEntry(entry) }
 
+    /** The editor waits for a real database result before it closes. */
+    suspend fun persistEntry(entry: Entry, isNew: Boolean): Boolean =
+        if (isNew) repo.saveNew(entry.copy(position = entries.value.size)) else repo.updateEntry(entry)
+
+    suspend fun archiveEntry(id: String): Boolean = repo.delete(id)
+    suspend fun restoreEntry(id: String): Boolean = repo.restore(id)
+
     /** Persist first; the database flow is the only authority for a checked state. */
     fun complete(id: String, date: LocalDate, checked: Boolean) {
         val key = CompletionGate.key(id, date)
