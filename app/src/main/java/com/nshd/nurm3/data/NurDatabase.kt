@@ -77,9 +77,10 @@ interface NurDao {
     suspend fun deleteEntry(id: String) = archiveEntry(id)
 }
 
-@Database(entities = [Entry::class, Completion::class], version = 2, exportSchema = true)
+@Database(entities = [Entry::class, Completion::class, DhikrPhrase::class, DhikrDay::class], version = 3, exportSchema = true)
 abstract class NurDatabase : RoomDatabase() {
     abstract fun dao(): NurDao
+    abstract fun dhikrDao(): DhikrDao
     companion object {
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -92,10 +93,19 @@ abstract class NurDatabase : RoomDatabase() {
                 db.execSQL("UPDATE completions SET titleSnapshot = COALESCE((SELECT title FROM entries WHERE entries.id = completions.entryId), ''), kindSnapshot = COALESCE((SELECT kind FROM entries WHERE entries.id = completions.entryId), '')")
             }
         }
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS dhikr_phrases (id TEXT NOT NULL, title TEXT NOT NULL, target INTEGER NOT NULL, sessionCount INTEGER NOT NULL, position INTEGER NOT NULL, createdAt INTEGER NOT NULL, archived INTEGER NOT NULL, PRIMARY KEY(id))")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_dhikr_phrases_position_createdAt ON dhikr_phrases (position, createdAt)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS dhikr_days (phraseId TEXT NOT NULL, localDate TEXT NOT NULL, count INTEGER NOT NULL, PRIMARY KEY(phraseId, localDate), FOREIGN KEY(phraseId) REFERENCES dhikr_phrases(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_dhikr_days_phraseId ON dhikr_days (phraseId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_dhikr_days_localDate ON dhikr_days (localDate)")
+            }
+        }
         @Volatile private var instance: NurDatabase? = null
         fun get(context: Context): NurDatabase = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, NurDatabase::class.java, "nur-m3.db")
-                .addMigrations(MIGRATION_1_2)
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
                 .build().also { instance = it }
         }
     }
