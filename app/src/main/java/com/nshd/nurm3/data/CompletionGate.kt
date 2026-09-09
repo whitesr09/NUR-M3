@@ -6,7 +6,9 @@ import java.time.LocalDate
 class CompletionGate {
     private val active = mutableSetOf<String>()
 
-    fun key(id: String, date: LocalDate): String = "$id|$date"
+    companion object {
+        fun key(id: String, date: LocalDate): String = "$id|$date"
+    }
 
     @Synchronized
     fun acquire(key: String): Boolean = active.add(key)
