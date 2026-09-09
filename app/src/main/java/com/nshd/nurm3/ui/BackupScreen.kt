@@ -58,8 +58,8 @@ fun BackupScreen() {
             Text("Backup & restore", style = MaterialTheme.typography.headlineMedium)
             Text("Your data stays yours. Export before reinstalling or changing signing certificates.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        item { SectionCard("Export your data", "Entries, recurrence, archive state and recorded completions", null) {
-            Text("The JSON file is readable and unencrypted. It does not include API keys or lock credentials.", style = MaterialTheme.typography.bodySmall)
+        item { SectionCard("Export your data", "Entries, recurrence, completion history and Dhikr counts", null) {
+            Text("The JSON file is readable and unencrypted. It includes your personal records but not API keys, PINs or lock credentials.", style = MaterialTheme.typography.bodySmall)
             Button(onClick = { exportLauncher.launch("NUR-M3-${LocalDate.now()}.json") }, enabled = !busy, modifier = Modifier.fillMaxWidth()) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -84,12 +84,16 @@ fun BackupScreen() {
                 Text("Created: $date")
                 Text("${payload.entries.size} saved entries")
                 Text("${payload.completions.size} completion records")
+                if (payload.schema >= 3) {
+                    Text("${payload.dhikrPhrases.size} Dhikr phrases")
+                    Text("${payload.dhikrDays.size} dated Dhikr records")
+                } else Text("Older backup (version ${payload.schema}): no Dhikr data. Your current Dhikr counters will be kept during replacement.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 HorizontalDivider()
-                Text("Merge adds missing entries and records. Existing local records win if identifiers conflict.", style = MaterialTheme.typography.bodySmall)
+                Text("Merge adds missing entries and records. Existing local records win if identifiers conflict; counts are not added together, avoiding duplicates.", style = MaterialTheme.typography.bodySmall)
                 Button(onClick = { runTask {
                     val count = manager.merge(payload)
                     pending = null
-                    message = "Import complete. $count new entries added; existing data was preserved."
+                    message = "Merge complete. $count new entries added; missing Dhikr phrases and dated records were imported where available. Existing data was preserved."
                 } }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Merge with my data") }
                 OutlinedButton(onClick = { confirmReplace = true }, enabled = !busy, modifier = Modifier.fillMaxWidth()) { Text("Replace local data…") }
                 TextButton(onClick = { pending = null }, modifier = Modifier.fillMaxWidth()) { Text("Cancel import") }
@@ -99,8 +103,8 @@ fun BackupScreen() {
     }
     if (confirmReplace) AlertDialog(
         onDismissRequest = { confirmReplace = false },
-        title = { Text("Replace all local data?") },
-        text = { Text("This replaces your saved entries and completion history with the selected backup. NUR will preserve a local recovery snapshot first. Export your current data to a safe location before continuing. This cannot recover an uninstalled app.") },
+        title = { Text("Replace local data?") },
+        text = { Text(if ((pending?.schema ?: 3) >= 3) "This replaces your saved entries, completion history, Dhikr phrases and dated counts with the selected backup. NUR preserves a complete local recovery snapshot first. Export your current data to a safe location before continuing. This cannot recover an uninstalled app." else "This older backup replaces your entries and completion history. Your current Dhikr counters will be kept because the backup contains no Dhikr data. A local recovery snapshot is preserved first. Export your current data before continuing.") },
         confirmButton = { TextButton(onClick = {
             confirmReplace = false
             val payload = pending ?: return@TextButton
