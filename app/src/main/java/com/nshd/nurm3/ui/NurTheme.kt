@@ -5,13 +5,17 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.nshd.nurm3.data.NurFontStore
 import com.nshd.nurm3.data.NurPreferences
 
 private val Night = Color(0xFF0B131B)
@@ -25,9 +29,9 @@ private fun paletteColor(name: String, dark: Boolean): Color = when (name) {
     "rose" -> if (dark) Color(0xFFE7B9C6) else Color(0xFF8B465D)
     else -> if (dark) NurDesign.gold else Color(0xFF806017)
 }
-private fun typography(scale: Float): Typography {
+private fun typography(scale: Float, family: FontFamily): Typography {
     val base = Typography()
-    fun TextStyle.scaled() = copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale)
+    fun TextStyle.scaled() = copy(fontSize = fontSize * scale, lineHeight = lineHeight * scale, fontFamily = family)
     return Typography(
         displayLarge = base.displayLarge.scaled(), displayMedium = base.displayMedium.scaled(), displaySmall = base.displaySmall.scaled(),
         headlineLarge = base.headlineLarge.scaled().copy(fontWeight = FontWeight.SemiBold),
@@ -57,6 +61,20 @@ fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
         "light" -> false
         "system" -> isSystemInDarkTheme()
         else -> true
+    }
+    val family = remember(context, prefs.fontStyle, prefs.customFontId) {
+        when (prefs.fontStyle) {
+            "sans" -> FontFamily.SansSerif
+            "serif" -> FontFamily.Serif
+            "mono" -> FontFamily.Monospace
+            "rounded" -> FontFamily.Cursive
+            "custom" -> {
+                val file = NurFontStore.file(context, prefs.customFontId)
+                if (file != null && file.isFile) runCatching { FontFamily(Font(file)) }.getOrDefault(FontFamily.SansSerif)
+                else FontFamily.SansSerif
+            }
+            else -> FontFamily.Default
+        }
     }
     val primary = paletteColor(prefs.palette, dark)
     val scheme = when {
@@ -106,6 +124,6 @@ fun NurTheme(prefs: NurPreferences, content: @Composable () -> Unit) {
         LocalNurReduceMotion provides prefs.reduceMotion,
         LocalNurProgressStyle provides prefs.progressStyle
     ) {
-        MaterialTheme(colorScheme = scheme, typography = typography(prefs.typeScale), shapes = shapes, content = content)
+        MaterialTheme(colorScheme = scheme, typography = typography(prefs.typeScale, family), shapes = shapes, content = content)
     }
 }

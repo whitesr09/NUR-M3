@@ -133,14 +133,15 @@ fun NurApp(model: NurViewModel, lock: NurLock, authenticate: ((Boolean, String) 
                 snackbarHost = { SnackbarHost(snackbar) }
             ) { padding ->
                 NavHost(navController = nav, startDestination = "journey", modifier = Modifier.fillMaxSize().padding(padding), enterTransition = { enter }, exitTransition = { exit }, popEnterTransition = { enter }, popExitTransition = { exit }) {
-                    composable("journey") { DailyJourneyScreen(entries, completions, today, prefs, model, navigate) }
+                    composable("journey") { DailyJourneyScreen14(entries, completions, today, prefs, model, navigate) }
                     composable("amanah") { EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model) }
                     composable("muhasaba") { EntryScreen("Muhasaba", "Reflect", NurKind.MUHASABA, entries, completions, today, model) }
                     composable("rhythm") { EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model) }
                     composable("history") { HistoryScreen(allEntries, completions) }
                     composable("settings") { PowerSettingsScreen(prefs, model, navigate, lock) }
-                    composable("appearance") { AppearanceStudio(prefs, model, refreshStatus) }
-                    composable("layout") { JourneyStudio(prefs.journey, model) }
+                    composable("appearance") { AppearanceStudio14(prefs, model, refreshStatus, navigate) }
+                    composable("fonts") { NurFontSettingsScreen(prefs, model) }
+                    composable("layout") { JourneyStudio14(prefs, model) }
                     composable("insights") { InsightsScreen(allEntries, completions, today) }
                     composable("backup") { BackupScreen() }
                     composable("privacy") { PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) } }
