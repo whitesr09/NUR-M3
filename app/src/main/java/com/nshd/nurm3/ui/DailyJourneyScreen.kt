@@ -1,7 +1,7 @@
 package com.nshd.nurm3.ui
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -35,11 +35,11 @@ fun DailyJourneyScreen(entries: List<Entry>, completions: List<Completion>, toda
         }
         items(prefs.journey.visible(), key = { it }) { id ->
             when (id) {
-                JourneyCard.LIGHT -> DailyLightCard(summary, active.filter { it.kind == NurKind.PRAYER }.count { it.id in done }, prefs)
+                JourneyCard.LIGHT -> DailyLightCard(summary, active.filter { it.kind == NurKind.PRAYER }.count { it.id in done }, today, prefs)
                 JourneyCard.PRAYERS -> {
                     SectionCard("Your prayers", "Five daily prayers", null) {
                         active.filter { it.kind == NurKind.PRAYER }.forEach { entry ->
-                            ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) })
+                            ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today)
                         }
                     }
                 }
@@ -50,8 +50,8 @@ fun DailyJourneyScreen(entries: List<Entry>, completions: List<Completion>, toda
                     SectionCard(JourneyCard.titles[id] ?: id, "$count of ${section.size} completed", { navigate(id) }) {
                         if (section.isEmpty()) Text("No items scheduled today.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         else {
-                            LinearProgressIndicator(progress = { count.toFloat() / section.size }, modifier = Modifier.fillMaxWidth())
-                            section.take(3).forEach { entry -> ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }) }
+                            NurLinearProgress(count.toFloat() / section.size, today, "${JourneyCard.titles[id] ?: id} progress")
+                            section.take(3).forEach { entry -> ChecklistRow(entry, entry.id in done, { model.complete(entry.id, today, it) }, date = today) }
                         }
                     }
                 }
@@ -61,15 +61,15 @@ fun DailyJourneyScreen(entries: List<Entry>, completions: List<Completion>, toda
 }
 
 @Composable
-private fun DailyLightCard(summary: ProgressSummary, prayersDone: Int, prefs: NurPreferences) {
-    val target = summary.fraction.coerceIn(0f, 1f)
-    val progress by animateFloatAsState(targetValue = target, animationSpec = if (prefs.reduceMotion) snap() else androidx.compose.animation.core.tween(650), label = "Daily Light progress")
-    val outer by animateFloatAsState(targetValue = prayersDone / 5f, animationSpec = if (prefs.reduceMotion) snap() else androidx.compose.animation.core.tween(650), label = "Prayer progress")
+private fun DailyLightCard(summary: ProgressSummary, prayersDone: Int, today: LocalDate, prefs: NurPreferences) {
+    val target = NurMotion.fraction(summary.fraction)
+    val progress = rememberNurProgress(target, today, "Daily Light")
+    val outer = rememberNurProgress(prayersDone / 5f, today, "Daily Light prayers")
     ElevatedCard(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(if (LocalNurCompact.current) 16.dp else 22.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
             if (prefs.showArabic) Text("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
             Text("Daily Light", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-            Box(Modifier.size(198.dp).semantics(mergeDescendants = true) { contentDescription = "Daily Light: ${summary.completed} of ${summary.total} completed"; progressBarRangeInfo = ProgressBarRangeInfo(target, 0f..1f) }, contentAlignment = Alignment.Center) {
+            Box(Modifier.size(198.dp).clearAndSetSemantics { contentDescription = "Daily Light: ${summary.completed} of ${summary.total} completed"; progressBarRangeInfo = ProgressBarRangeInfo(target, 0f..1f) }, contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(progress = { outer }, modifier = Modifier.size(188.dp), strokeWidth = 3.dp, color = MaterialTheme.colorScheme.primary.copy(alpha = 0.65f), trackColor = MaterialTheme.colorScheme.surfaceVariant)
                 CircularProgressIndicator(progress = { progress }, modifier = Modifier.size(154.dp), strokeWidth = 10.dp, color = MaterialTheme.colorScheme.primary, trackColor = MaterialTheme.colorScheme.surfaceVariant)
                 listOf(Alignment.TopCenter, Alignment.BottomCenter, Alignment.CenterStart, Alignment.CenterEnd).forEach { alignment ->
@@ -77,7 +77,7 @@ private fun DailyLightCard(summary: ProgressSummary, prayersDone: Int, prefs: Nu
                 }
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("الله", style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.primary)
-                    Text("${(target * 100).toInt()}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("${NurMotion.percent(progress)}%", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 }
             }
             Text("${summary.completed} of ${summary.total} completed", style = MaterialTheme.typography.bodyMedium)
@@ -90,8 +90,9 @@ private fun DailyLightCard(summary: ProgressSummary, prayersDone: Int, prefs: Nu
 
 @Composable
 fun SectionCard(title: String, subtitle: String, onOpen: (() -> Unit)?, content: @Composable ColumnScope.() -> Unit) {
+    val reduceMotion = LocalNurReduceMotion.current
     ElevatedCard(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(if (LocalNurCompact.current) 12.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.then(if (reduceMotion) Modifier else Modifier.animateContentSize()).padding(if (LocalNurCompact.current) 12.dp else 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -105,8 +106,10 @@ fun SectionCard(title: String, subtitle: String, onOpen: (() -> Unit)?, content:
 }
 
 @Composable
-fun ChecklistRow(entry: Entry, checked: Boolean, onChecked: (Boolean) -> Unit, enabled: Boolean = true, trailing: (@Composable () -> Unit)? = null) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+fun ChecklistRow(entry: Entry, checked: Boolean, onChecked: (Boolean) -> Unit, enabled: Boolean = true, trailing: (@Composable () -> Unit)? = null, date: LocalDate = LocalDate.MIN) {
+    val feedback = rememberNurProgress(if (checked && enabled) 1f else 0f, date, "completion-${entry.id}")
+    val tint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f * feedback)
+    Row(Modifier.fillMaxWidth().background(tint, MaterialTheme.shapes.medium), verticalAlignment = Alignment.CenterVertically) {
         Checkbox(checked = checked, onCheckedChange = onChecked, enabled = enabled)
         Column(Modifier.weight(1f).padding(horizontal = 4.dp)) {
             Text(entry.title, style = MaterialTheme.typography.bodyLarge)
