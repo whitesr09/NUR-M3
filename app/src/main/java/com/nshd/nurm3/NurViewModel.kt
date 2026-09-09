@@ -11,6 +11,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class NurViewModel(application: Application) : AndroidViewModel(application) {
     private val database = NurDatabase.get(application)
@@ -24,6 +26,7 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     private val _today = MutableStateFlow(LocalDate.now())
     val today: StateFlow<LocalDate> = _today.asStateFlow()
     val dhikrPhrases = dhikrRepo.phrases.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val dhikrDays = dhikrRepo.days.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     @OptIn(ExperimentalCoroutinesApi::class)
     val dhikrSnapshots = today.flatMapLatest { dhikrRepo.snapshots(it) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -34,6 +37,11 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiEvents = MutableSharedFlow<String>(extraBufferCapacity = 4, onBufferOverflow = BufferOverflow.DROP_OLDEST)
     val uiEvents: SharedFlow<String> = _uiEvents.asSharedFlow()
 
+    /** Each accepted counter tap is serialized, not discarded while a previous tap is saving. */
+    private val dhikrMutationMutex = Mutex()
+    private val _dhikrPending = MutableStateFlow<Map<String, Int>>(emptyMap())
+    val dhikrPending: StateFlow<Map<String, Int>> = _dhikrPending.asStateFlow()
+
     init {
         viewModelScope.launch {
             val dao = database.dao()
@@ -42,7 +50,7 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
                     dao.saveEntry(Entry("prayer-${index + 1}", NurKind.PRAYER, title, index, System.currentTimeMillis()))
                 }
             }
-            dhikrRepo.seedDefaults()
+            dhikrMutationMutex.withLock { dhikrRepo.seedDefaults() }
         }
     }
 
@@ -89,15 +97,26 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun journey(layout: JourneyLayout) = viewModelScope.launch { settings.saveJourney(layout) }
     fun resetAppearance() = viewModelScope.launch { settings.resetAppearance() }
 
-    /** The actual local date is captured when the user taps, not when a screen was opened. */
+    /** Capture the tap's local date before waiting for other writes. */
     suspend fun incrementDhikr(id: String): Boolean {
-        val saved = dhikrRepo.increment(id, LocalDate.now())
-        if (saved) refreshDate()
-        return saved
+        val date = LocalDate.now()
+        _dhikrPending.update { current -> current + (id to ((current[id] ?: 0) + 1)) }
+        try {
+            return dhikrMutationMutex.withLock {
+                val saved = dhikrRepo.increment(id, date)
+                if (saved) refreshDate()
+                saved
+            }
+        } finally {
+            _dhikrPending.update { current ->
+                val remaining = (current[id] ?: 1) - 1
+                if (remaining <= 0) current - id else current + (id to remaining)
+            }
+        }
     }
-    suspend fun addDhikr(title: String, target: Int) = dhikrRepo.add(title, target)
-    suspend fun updateDhikr(id: String, title: String, target: Int) = dhikrRepo.update(id, title, target)
-    suspend fun resetDhikrSession(id: String) = dhikrRepo.resetSession(id)
-    suspend fun archiveDhikr(id: String) = dhikrRepo.archive(id)
-    suspend fun restoreDhikr(id: String) = dhikrRepo.restore(id)
+    suspend fun addDhikr(title: String, target: Int) = dhikrMutationMutex.withLock { dhikrRepo.add(title, target) }
+    suspend fun updateDhikr(id: String, title: String, target: Int) = dhikrMutationMutex.withLock { dhikrRepo.update(id, title, target) }
+    suspend fun resetDhikrSession(id: String) = dhikrMutationMutex.withLock { dhikrRepo.resetSession(id) }
+    suspend fun archiveDhikr(id: String) = dhikrMutationMutex.withLock { dhikrRepo.archive(id) }
+    suspend fun restoreDhikr(id: String) = dhikrMutationMutex.withLock { dhikrRepo.restore(id) }
 }
