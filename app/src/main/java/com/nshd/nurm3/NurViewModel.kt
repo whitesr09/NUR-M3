@@ -64,7 +64,6 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun archiveEntry(id: String): Boolean = repo.delete(id)
     suspend fun restoreEntry(id: String): Boolean = repo.restore(id)
 
-    /** Persist first; the database flow is the only authority for a checked state. */
     fun complete(id: String, date: LocalDate, checked: Boolean) {
         val key = CompletionGate.key(id, date)
         if (!completionGate.acquire(key)) return
@@ -92,6 +91,8 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun setting(key: String, value: Boolean) = viewModelScope.launch { settings.update(key, value) }
     fun choice(key: String, value: String) = viewModelScope.launch { settings.updateChoice(key, value) }
     fun typeScale(value: Float) = viewModelScope.launch { settings.updateScale(value) }
+    fun glassIntensity(value: Float) = viewModelScope.launch { settings.updateGlassIntensity(value) }
+    fun glassBlurRadius(value: Int) = viewModelScope.launch { settings.updateGlassBlurRadius(value) }
     fun journey(layout: JourneyLayout) = viewModelScope.launch { settings.saveJourney(layout) }
     fun journeyOptions(transform: (JourneyOptions) -> JourneyOptions) = viewModelScope.launch { settings.updateJourneyOptions(transform) }
     fun journeyPreset(name: String) = viewModelScope.launch {
@@ -103,14 +104,12 @@ class NurViewModel(application: Application) : AndroidViewModel(application) {
     fun applyJourneyLayout(layout: JourneyLayout) = viewModelScope.launch { settings.applyJourneyLayout(layout) }
     fun resetAppearance() = viewModelScope.launch { settings.resetAppearance() }
 
-    /** Import into app-private storage before changing the selected font. */
     suspend fun importFont(uri: Uri): String {
         val imported = fontStore.import(uri)
         settings.selectCustomFont(imported.id, imported.name)
         return imported.name
     }
 
-    /** Capture the tap's local date before waiting for other writes. */
     suspend fun incrementDhikr(id: String): Boolean {
         val date = LocalDate.now()
         _dhikrPending.update { current -> current + (id to ((current[id] ?: 0) + 1)) }
