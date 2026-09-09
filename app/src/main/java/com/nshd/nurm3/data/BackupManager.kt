@@ -17,12 +17,14 @@ class BackupManager(private val context: Context, private val database: NurDatab
     private val dao = database.dao()
     private val dhikr = database.dhikrDao()
 
-    suspend fun export(): String = database.withTransaction {
+    private suspend fun snapshot(): String {
         val raw = BackupCodec.export(dao.getAllEntries(), dao.getAllCompletions(),
             dhikrPhrases = dhikr.getAllPhrases(), dhikrDays = dhikr.getAllDays())
         require(raw.toByteArray(Charsets.UTF_8).size <= BackupCodec.MAX_BYTES) { "Backup is too large" }
-        raw
+        return raw
     }
+
+    suspend fun export(): String = database.withTransaction { snapshot() }
 
     suspend fun write(uri: Uri, data: String) = withContext(Dispatchers.IO) {
         require(data.toByteArray(Charsets.UTF_8).size <= BackupCodec.MAX_BYTES)
@@ -60,24 +62,25 @@ class BackupManager(private val context: Context, private val database: NurDatab
         }
     }
 
-    /** Preserve a complete recovery snapshot before replacing user data. */
+    private suspend fun preserveRecovery(recovery: String) = withContext(Dispatchers.IO) {
+        val file = File(context.noBackupFilesDir, "nur-recovery.json")
+        val temporary = File(context.noBackupFilesDir, "nur-recovery.tmp")
+        FileOutputStream(temporary).use { stream ->
+            stream.write(recovery.toByteArray(Charsets.UTF_8))
+            stream.fd.sync()
+        }
+        try {
+            Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+        } catch (_: AtomicMoveNotSupportedException) {
+            Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
+        }
+    }
+
+    /** A single transaction prevents new counts arriving between the recovery snapshot and replacement. */
     suspend fun replace(payload: BackupPayload) {
         BackupCodec.validate(payload)
-        val recovery = export()
-        withContext(Dispatchers.IO) {
-            val file = File(context.noBackupFilesDir, "nur-recovery.json")
-            val temporary = File(context.noBackupFilesDir, "nur-recovery.tmp")
-            FileOutputStream(temporary).use { stream ->
-                stream.write(recovery.toByteArray(Charsets.UTF_8))
-                stream.fd.sync()
-            }
-            try {
-                Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(temporary.toPath(), file.toPath(), StandardCopyOption.REPLACE_EXISTING)
-            }
-        }
         database.withTransaction {
+            preserveRecovery(snapshot())
             dao.clearCompletionsForRestore()
             dao.clearNonPrayerEntriesForRestore()
             payload.entries.filter { it.kind != NurKind.PRAYER }.forEach { dao.saveEntry(it) }
