@@ -12,9 +12,11 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -22,6 +24,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /** Optional surface system used throughout NUR. */
@@ -50,6 +53,25 @@ data class NurGlassStyle(
 
 val LocalNurGlass = staticCompositionLocalOf { NurGlassStyle() }
 
+/** True when a main destination is intentionally drawing underneath the fixed glass chrome. */
+val LocalNurUnderChrome = staticCompositionLocalOf { false }
+
+/**
+ * Main destinations keep their first/last items clear of the floating chrome while the LazyColumn
+ * itself remains full-screen. Once the user scrolls, content can visibly travel behind the glass.
+ */
+@Composable
+fun NurScrollContentPadding(home: Boolean = false, horizontal: Dp = NurDesign.pagePadding): PaddingValues {
+    return if (LocalNurUnderChrome.current) {
+        PaddingValues(
+            start = horizontal,
+            end = horizontal,
+            top = if (home) 148.dp else 108.dp,
+            bottom = 116.dp
+        )
+    } else PaddingValues(horizontal)
+}
+
 /**
  * Adds visible depth behind translucent panels. Compose cannot perform true per-card backdrop
  * filtering on every Android version, so NUR uses real window blur where supported plus a
@@ -66,9 +88,7 @@ fun NurGlassBackdrop(modifier: Modifier = Modifier, content: @Composable BoxScop
                 "frosted" -> 0.17f
                 else -> 0.10f
             } * style.intensity
-            Canvas(
-                Modifier.matchParentSize().blur((style.blurRadius.coerceAtLeast(12)).dp)
-            ) {
+            Canvas(Modifier.matchParentSize().blur((style.blurRadius.coerceAtLeast(12)).dp)) {
                 val min = size.minDimension
                 drawCircle(
                     color = scheme.primary.copy(alpha = depth),
@@ -172,6 +192,90 @@ fun NurGlassSurface(modifier: Modifier = Modifier, content: @Composable ColumnSc
             verticalArrangement = Arrangement.spacedBy(12.dp),
             content = content
         )
+    }
+}
+
+/**
+ * Stronger glass used by fixed top/bottom chrome. The scrolling content is drawn underneath it,
+ * so translucency is genuine rather than a solid card painted to look transparent.
+ */
+@Composable
+fun NurGlassChromeSurface(
+    modifier: Modifier = Modifier,
+    shape: androidx.compose.ui.graphics.Shape = RoundedCornerShape(30.dp),
+    content: @Composable BoxScope.() -> Unit
+) {
+    val style = LocalNurGlass.current
+    val scheme = MaterialTheme.colorScheme
+    val dark = scheme.background.luminance() < 0.35f
+    val enabled = style.enabled
+    val alpha = if (!enabled) 0.96f else when (style.mode) {
+        "subtle" -> 0.78f
+        "frosted" -> 0.53f
+        else -> 0.39f
+    }.let { (it * (0.72f + style.intensity * 0.28f)).coerceIn(0.30f, 0.92f) }
+    val borderColor = if (!enabled) scheme.outlineVariant.copy(alpha = 0.72f)
+        else if (dark) Color.White.copy(alpha = if (style.liquid) 0.24f else 0.16f)
+        else Color.White.copy(alpha = if (style.liquid) 0.80f else 0.64f)
+
+    Surface(
+        modifier = modifier,
+        shape = shape,
+        color = scheme.surface.copy(alpha = alpha),
+        border = BorderStroke(if (style.liquid) 1.25.dp else 1.dp, borderColor),
+        tonalElevation = 0.dp,
+        shadowElevation = if (enabled) 10.dp else 2.dp
+    ) {
+        val glow = if (enabled) scheme.primary.copy(alpha = if (style.liquid) 0.11f else 0.055f) else Color.Transparent
+        Box(
+            Modifier.fillMaxWidth().clip(shape).background(
+                Brush.linearGradient(
+                    listOf(
+                        if (dark) Color.White.copy(alpha = if (enabled) 0.075f else 0f) else Color.White.copy(alpha = if (enabled) 0.35f else 0f),
+                        Color.Transparent,
+                        glow,
+                        Color.Transparent
+                    ),
+                    start = Offset.Zero,
+                    end = Offset(1000f, 700f)
+                )
+            ),
+            content = content
+        )
+    }
+}
+
+/** Circular glass control used for NUR AI and other floating chrome actions. */
+@Composable
+fun NurGlassFab(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    contentDescription: String = "Action",
+    content: @Composable BoxScope.() -> Unit
+) {
+    val style = LocalNurGlass.current
+    val scheme = MaterialTheme.colorScheme
+    val dark = scheme.background.luminance() < 0.35f
+    val alpha = if (!style.enabled) 0.96f else if (style.liquid) 0.48f else 0.60f
+    val border = if (dark) Color.White.copy(alpha = if (style.enabled) 0.24f else 0.10f)
+        else Color.White.copy(alpha = if (style.enabled) 0.82f else 0.25f)
+    Surface(
+        onClick = onClick,
+        modifier = modifier.size(64.dp),
+        shape = CircleShape,
+        color = scheme.primaryContainer.copy(alpha = alpha),
+        contentColor = scheme.onPrimaryContainer,
+        border = BorderStroke(1.25.dp, border),
+        shadowElevation = if (style.enabled) 12.dp else 6.dp
+    ) {
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.linearGradient(
+                    listOf(Color.White.copy(alpha = if (style.enabled) 0.13f else 0f), Color.Transparent, scheme.primary.copy(alpha = 0.12f))
+                )
+            ),
+            contentAlignment = Alignment.Center
+        ) { content() }
     }
 }
 

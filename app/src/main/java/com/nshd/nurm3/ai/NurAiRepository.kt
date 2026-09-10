@@ -3,6 +3,7 @@ package com.nshd.nurm3.ai
 import android.content.Context
 import com.nshd.nurm3.data.NurPrivateStore
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -10,17 +11,14 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
 
-/**
- * User-owned Gemini client. Nothing is sent until the user explicitly enables NUR AI
- * networking and submits a request. Credentials, model preference and local history live
- * only in NUR's Keystore-backed private store and are excluded from backups/widgets.
- */
+/** User-owned Gemini client. Credentials and history stay in NUR private storage. */
 data class AiMessage(val id: String, val role: String, val text: String, val time: Long = System.currentTimeMillis())
 data class AiSource(val title: String, val url: String)
 data class AiReply(val text: String, val sources: List<AiSource> = emptyList(), val model: String = "")
 data class AiModelOption(val id: String, val displayName: String)
 
 private class ModelUnavailableException(message: String) : Exception(message)
+private class TransientGeminiException(message: String) : Exception(message)
 
 class NurAiRepository(context: Context) {
     private val store = NurPrivateStore(context)
@@ -49,14 +47,14 @@ class NurAiRepository(context: Context) {
         (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
             AiMessage(item.getString("id"), item.getString("role"), item.getString("text"), item.getLong("time"))
-        }.filter { it.role in setOf("user", "model") && it.text.length <= 32_000 }
+        }.filter { it.role in setOf("user", "model") && it.text.length <= MAX_TEXT_CHARS }
     }.getOrDefault(emptyList())
 
     fun saveHistory(messages: List<AiMessage>) {
         val array = JSONArray()
         messages.takeLast(100).forEach {
             require(it.role in setOf("user", "model"))
-            require(it.text.length <= 32_000)
+            require(it.text.length <= MAX_TEXT_CHARS)
             array.put(JSONObject().put("id", it.id).put("role", it.role).put("text", it.text).put("time", it.time))
         }
         store.put(historyName, array.toString())
@@ -98,30 +96,44 @@ class NurAiRepository(context: Context) {
     private fun serverMessage(connection: HttpURLConnection): String = runCatching {
         val stream = connection.errorStream ?: return@runCatching ""
         val raw = stream.bufferedReader(Charsets.UTF_8).use { it.readText().take(16_000) }
-        val root = JSONObject(raw)
-        root.optJSONObject("error")?.optString("message").orEmpty().replace(Regex("\\s+"), " ").take(260)
+        JSONObject(raw).optJSONObject("error")?.optString("message").orEmpty()
+            .replace(Regex("\\s+"), " ").take(260)
     }.getOrDefault("")
 
     private fun requestFailure(connection: HttpURLConnection, code: Int): Exception {
         val detail = serverMessage(connection)
         val base = when (code) {
-            400 -> "Gemini rejected the request."
-            401, 403 -> "Gemini rejected this API key or the key does not have Gemini API access. Create or review a current Gemini API key in Google AI Studio."
-            404 -> "The selected Gemini model is no longer available."
-            429 -> "Gemini rate limit reached. Try again later or review your quota."
+            400 -> "Gemini rejected this request."
+            401, 403 -> "Gemini rejected this API key or the key does not have Gemini API access. Review the key in Google AI Studio."
+            404 -> "This Gemini model is no longer available."
+            408 -> "Gemini timed out while preparing the answer."
+            429 -> "This Gemini model is temporarily rate limited."
+            500, 502, 503, 504 -> "Gemini is temporarily busy."
             else -> "Gemini request failed (HTTP $code)."
         }
         val message = if (detail.isBlank()) base else "$base $detail"
-        return if (code == 404) ModelUnavailableException(message) else IllegalStateException(message)
+        return when (code) {
+            404 -> ModelUnavailableException(message)
+            408, 429, 500, 502, 503, 504 -> TransientGeminiException(message)
+            else -> IllegalStateException(message)
+        }
+    }
+
+    private fun isChatModel(id: String): Boolean {
+        if (!id.startsWith("gemini-", ignoreCase = true)) return false
+        val blocked = listOf("image", "tts", "audio", "live", "embedding", "robotics", "computer-use", "deep-research")
+        return blocked.none { id.contains(it, ignoreCase = true) }
     }
 
     private fun modelScore(id: String): Int = when {
         id == "gemini-3.5-flash" -> 0
         id == "gemini-flash-latest" -> 1
-        id.contains("flash", ignoreCase = true) && !id.contains("preview", ignoreCase = true) -> 2
-        id.contains("flash", ignoreCase = true) -> 3
-        id.contains("pro", ignoreCase = true) && !id.contains("preview", ignoreCase = true) -> 4
-        id.startsWith("gemini-", ignoreCase = true) -> 5
+        id == "gemini-2.5-flash" -> 2
+        id == "gemini-3.1-flash-lite" -> 3
+        id == "gemini-2.5-flash-lite" -> 4
+        id.contains("flash", true) && !id.contains("preview", true) && !id.contains("exp", true) -> 5
+        id.contains("flash", true) -> 7
+        id.contains("pro", true) && !id.contains("preview", true) -> 9
         else -> 20
     }
 
@@ -137,15 +149,15 @@ class NurAiRepository(context: Context) {
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
                 val name = item.optString("name").removePrefix("models/")
-                if (!validModel(name) || !name.startsWith("gemini-", ignoreCase = true)) continue
+                if (!validModel(name) || !isChatModel(name)) continue
                 val methods = item.optJSONArray("supportedGenerationMethods") ?: JSONArray()
                 var supportsGenerate = false
                 for (m in 0 until methods.length()) if (methods.optString(m) == "generateContent") supportsGenerate = true
                 if (!supportsGenerate) continue
-                val display = item.optString("displayName").ifBlank { name }
-                result += AiModelOption(name, display.take(120))
+                result += AiModelOption(name, item.optString("displayName").ifBlank { name }.take(120))
             }
-            return result.distinctBy { it.id }.sortedWith(compareBy<AiModelOption> { modelScore(it.id) }.thenBy { it.id })
+            return result.distinctBy { it.id }
+                .sortedWith(compareBy<AiModelOption> { modelScore(it.id) }.thenBy { it.id })
         } finally {
             connection.disconnect()
         }
@@ -230,7 +242,7 @@ class NurAiRepository(context: Context) {
                 }
                 consumeEvent()
             }
-            if (aggregate.isBlank()) error("Gemini returned no readable text. The request may have been blocked.")
+            if (aggregate.isBlank()) error("Gemini returned no readable text. Try again.")
             return AiReply(aggregate.toString(), sources.take(12), modelId)
         } finally {
             connection.disconnect()
@@ -238,10 +250,8 @@ class NurAiRepository(context: Context) {
     }
 
     /**
-     * Streams Gemini responses. Auto mode first asks Gemini which generateContent models are
-     * actually available to this key. If a manually selected model has been retired, NUR
-     * automatically discovers a compatible fallback and retries once instead of trapping the
-     * user on an obsolete model ID.
+     * Auto mode discovers models exposed to the key. Transient 408/429/5xx failures retry the
+     * same candidate and then move to the next compatible model, while retired models are skipped.
      */
     suspend fun sendStreaming(
         messages: List<AiMessage>,
@@ -252,18 +262,39 @@ class NurAiRepository(context: Context) {
         require(consent) { "Enable NUR AI network access first." }
         val key = store.get(keyName) ?: error("Add your Gemini API key first.")
         val selected = model()
-        val discovered = if (selected == AUTO_MODEL) listModels(key) else emptyList()
-        val first = if (selected == AUTO_MODEL) discovered.firstOrNull()?.id
-            ?: error("No compatible Gemini chat model is available for this key.")
-        else selected
 
-        try {
-            sendStreamingWithModel(key, first, messages, useGrounding, onPartial)
-        } catch (unavailable: ModelUnavailableException) {
-            val alternatives = if (discovered.isNotEmpty()) discovered else listModels(key)
-            val fallback = alternatives.firstOrNull { it.id != first }?.id ?: throw unavailable
-            sendStreamingWithModel(key, fallback, messages, useGrounding, onPartial)
+        val discovered = try {
+            listModels(key)
+        } catch (transient: TransientGeminiException) {
+            emptyList()
         }
+
+        val candidates = buildList {
+            if (selected != AUTO_MODEL && isChatModel(selected)) add(selected)
+            addAll(discovered.map { it.id })
+            addAll(FALLBACK_MODELS)
+        }.filter(::isChatModel).distinct().take(MAX_MODEL_ATTEMPTS)
+
+        if (candidates.isEmpty()) error("No compatible Gemini chat model is available for this key.")
+        var lastFailure: Exception? = null
+
+        for (candidate in candidates) {
+            for (attempt in 0..1) {
+                try {
+                    return@withContext sendStreamingWithModel(key, candidate, messages, useGrounding, onPartial)
+                } catch (unavailable: ModelUnavailableException) {
+                    lastFailure = unavailable
+                    break
+                } catch (transient: TransientGeminiException) {
+                    lastFailure = transient
+                    if (attempt == 0) delay(450L) else break
+                }
+            }
+        }
+
+        throw IllegalStateException(
+            "NUR AI tried the compatible Gemini models but the service stayed temporarily unavailable. Please send the message again in a moment.${lastFailure?.message?.let { " $it" }.orEmpty()}"
+        )
     }
 
     suspend fun send(messages: List<AiMessage>, consent: Boolean, useGrounding: Boolean = false): AiReply =
@@ -272,7 +303,15 @@ class NurAiRepository(context: Context) {
     companion object {
         const val AUTO_MODEL = "auto"
         const val DEFAULT_MODEL = AUTO_MODEL
-        val MODEL_PRESETS = listOf(AUTO_MODEL, "gemini-3.5-flash", "gemini-flash-latest")
+        val FALLBACK_MODELS = listOf(
+            "gemini-3.5-flash",
+            "gemini-flash-latest",
+            "gemini-2.5-flash",
+            "gemini-3.1-flash-lite",
+            "gemini-2.5-flash-lite"
+        )
+        val MODEL_PRESETS = listOf(AUTO_MODEL) + FALLBACK_MODELS
+        private const val MAX_MODEL_ATTEMPTS = 8
         private const val MAX_STREAM_CHARS = 1_048_576
         private const val MAX_MODEL_LIST_CHARS = 1_048_576
         private const val MAX_TEXT_CHARS = 32_000

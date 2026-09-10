@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun EntryScreen(title: String, subtitle: String, kind: String, entries: List<Entry>, completions: List<Completion>, today: LocalDate, model: NurViewModel) {
+fun EntryScreen(title: String, subtitle: String, kind: String, entries: List<Entry>, completions: List<Completion>, today: LocalDate, model: NurViewModel, initialAdd: Boolean = false) {
     val section = entries.filter { it.kind == kind }
     val active = section.filter { EntrySchedule.isActive(it, today) }
     val done = DailyProgress.completedIds(completions, today)
@@ -41,7 +41,7 @@ fun EntryScreen(title: String, subtitle: String, kind: String, entries: List<Ent
     val scope = rememberCoroutineScope()
     val snackbar = LocalNurSnackbarHost.current
     var editing by remember { mutableStateOf<Entry?>(null) }
-    var adding by remember { mutableStateOf(false) }
+    var adding by rememberSaveable { mutableStateOf(initialAdd) }
     var deleting by remember { mutableStateOf<Entry?>(null) }
     var archivingId by remember { mutableStateOf<String?>(null) }
     var query by rememberSaveable { mutableStateOf("") }
@@ -56,7 +56,7 @@ fun EntryScreen(title: String, subtitle: String, kind: String, entries: List<Ent
     val other = section.filter { !EntrySchedule.isActive(it, today) && matches(it) }
     val itemName = if (kind == NurKind.RHYTHM) "habit" else "entry"
 
-    LazyColumn(contentPadding = PaddingValues(NurDesign.pagePadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(contentPadding = NurScrollContentPadding(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             NurPageHeading("Your daily practice", title, subtitle)
             Spacer(Modifier.height(14.dp))
@@ -280,7 +280,7 @@ fun HistoryScreen(entries: List<Entry>, completions: List<Completion>) {
     val dates = completions.map { it.localDate }.distinct().sortedDescending()
     val byId = remember(entries) { entries.associateBy { it.id } }
     var expanded by rememberSaveable { mutableStateOf<String?>(dates.firstOrNull()) }
-    LazyColumn(contentPadding = PaddingValues(NurDesign.pagePadding), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+    LazyColumn(contentPadding = NurScrollContentPadding(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { NurPageHeading("Your record", "History", "Only your actual saved completions appear here.") }
         if (dates.isEmpty()) item { NurEmptyState(Icons.Default.History, "Your history starts here", "Complete a prayer, task or habit to see your first recorded day.") }
         items(dates, key = { it }) { date ->

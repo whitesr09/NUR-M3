@@ -34,7 +34,7 @@ fun DailyJourneyScreen14(entries: List<Entry>, completions: List<Completion>, to
     val nextTask = active.firstOrNull { it.kind == NurKind.AMANAH && it.id !in done }
     val next = nextTask ?: nextPrayer ?: active.firstOrNull { it.kind != NurKind.PRAYER && it.id !in done }
     val greeting = when (LocalTime.now().hour) { in 5..11 -> "Good morning"; in 12..16 -> "Good afternoon"; else -> "Good evening" }
-    LazyColumn(contentPadding = PaddingValues(NurDesign.pagePadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(contentPadding = NurScrollContentPadding(home = true), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item {
             NurPageHeading("$greeting · ${today.format(DateTimeFormatter.ofPattern("EEE, d MMM"))}", "Your Daily Journey", "A meaningful day, one step at a time.", action = {
                 IconButton(onClick = { navigate("layout") }, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.Tune, contentDescription = "Customize Journey") }
@@ -91,8 +91,9 @@ fun DailyJourneyScreen14(entries: List<Entry>, completions: List<Completion>, to
 
 @Composable
 private fun JourneyQuickAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, modifier: Modifier, onClick: () -> Unit) {
-    Surface(onClick = onClick, modifier = modifier.heightIn(min = 76.dp), shape = MaterialTheme.shapes.medium, color = MaterialTheme.colorScheme.surface,
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)) {
+    Surface(onClick = onClick, modifier = modifier.heightIn(min = 76.dp), shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surface.copy(alpha = if (LocalNurGlass.current.enabled) 0.62f else 1f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))) {
         Column(Modifier.padding(6.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Icon(icon, null, Modifier.size(22.dp), tint = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(5.dp))

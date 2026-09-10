@@ -141,6 +141,9 @@ fun NurApp(
         "system" -> isSystemInDarkTheme()
         else -> true
     }
+    val tabs = remember(prefs.bottomNavigation) { resolveNurTabs(prefs.bottomNavigation) }
+    val tabRoutes = remember(tabs) { tabs.map { it.route }.toSet() }
+    val underChrome = current in tabRoutes
 
     LaunchedEffect(prefs.highRefreshRate, locked) { activity.refreshController.setEnabled(prefs.highRefreshRate && !locked) }
     LaunchedEffect(prefs.glassMode, prefs.glassBlurRadius, locked) {
@@ -171,7 +174,7 @@ fun NurApp(
             else {
                 val navigate: (String) -> Unit = { route ->
                     if (route != current || route.contains('?')) {
-                        if (route in NurMainTabs.map { it.route }) nav.navigate(route) {
+                        if (route.substringBefore("?") in tabRoutes) nav.navigate(route) {
                             popUpTo(nav.graph.startDestinationId) { saveState = true }
                             launchSingleTop = true
                             restoreState = true
@@ -186,54 +189,61 @@ fun NurApp(
 
                 NurGlassBackdrop(Modifier.fillMaxSize()) {
                     Scaffold(
-                        containerColor = if (LocalNurGlass.current.enabled) Color.Transparent else MaterialTheme.colorScheme.background,
+                        containerColor = Color.Transparent,
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
-                        topBar = { NurTopBar(current, today, onBack = { if (!nav.popBackStack()) navigate("journey") }, onSettings = { navigate("settings") }) },
-                        bottomBar = { if (current in NurMainTabs.map { it.route }) NurBottomBar(current, navigate) },
+                        topBar = {
+                            NurTopBar(
+                                current,
+                                today,
+                                tabs = tabs,
+                                onBack = { if (!nav.popBackStack()) navigate("journey") },
+                                onSettings = { navigate("settings") }
+                            )
+                        },
+                        bottomBar = { if (underChrome) NurBottomBar(current, tabs, navigate) },
                         floatingActionButton = {
                             if (current != "ai") {
-                                FloatingActionButton(
-                                    onClick = { navigate("ai") },
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    shape = MaterialTheme.shapes.extraLarge
-                                ) {
-                                    Icon(Icons.Default.AutoAwesome, contentDescription = "Open NUR AI")
+                                NurGlassFab(onClick = { navigate("ai") }, contentDescription = "Open NUR AI") {
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = "Open NUR AI", modifier = Modifier.size(27.dp))
                                 }
                             }
                         },
                         floatingActionButtonPosition = FabPosition.End,
                         snackbarHost = { SnackbarHost(snackbar) }
                     ) { padding ->
-                        NavHost(
-                            navController = nav,
-                            startDestination = "journey",
-                            modifier = Modifier.fillMaxSize().padding(padding),
-                            enterTransition = { enter },
-                            exitTransition = { exit },
-                            popEnterTransition = { enter },
-                            popExitTransition = { exit }
-                        ) {
-                            composable("journey") { DailyJourneyScreen14(entries, completions, today, prefs, model, navigate) }
-                            composable("amanah?create={create}", arguments = listOf(androidx.navigation.navArgument("create") { type = androidx.navigation.NavType.BoolType; defaultValue = false })) { entry -> EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model, initialAdd = entry.arguments?.getBoolean("create") == true) }
-                            composable("muhasaba") { EntryScreen("Muhasaba", "Reflect", NurKind.MUHASABA, entries, completions, today, model) }
-                            composable("rhythm") { EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model) }
-                            composable("history") { HistoryScreen(allEntries, completions) }
-                            composable("settings") { PowerSettingsScreen(prefs, model, navigate, lock) }
-                            composable("appearance") { AppearanceStudio14(prefs, model, refreshStatus, navigate) }
-                            composable("fonts") { NurFontSettingsScreen(prefs, model) }
-                            composable("layout") { JourneyStudio14(prefs, model) }
-                            composable("insights") { InsightsScreen(allEntries, completions, today) }
-                            composable("backup") { BackupScreen() }
-                            composable("secure-backup") { SecureBackupScreen() }
-                            composable("backup-health") { BackupHealthScreen() }
-                            composable("privacy") { PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) } }
-                            composable("dhikr") { DhikrScreen(model, prefs, today) }
-                            composable("focus") { FocusScreen(focus) }
-                            composable("ai") { NurAiScreen(prefs, model) }
-                            composable("widgets") { NurWidgetSettingsScreen(prefs, model) }
-                            composable("accessibility") { NurAccessibilityScreen(prefs, model) }
-                            composable("reflections?verse={verse}", arguments = listOf(androidx.navigation.navArgument("verse") { type = androidx.navigation.NavType.StringType; defaultValue = "" })) { entry -> ReflectionScreen(entry.arguments?.getString("verse")) }
+                        CompositionLocalProvider(LocalNurUnderChrome provides underChrome) {
+                            val hostModifier = if (underChrome) Modifier.fillMaxSize() else Modifier.fillMaxSize().padding(padding)
+                            NavHost(
+                                navController = nav,
+                                startDestination = "journey",
+                                modifier = hostModifier,
+                                enterTransition = { enter },
+                                exitTransition = { exit },
+                                popEnterTransition = { enter },
+                                popExitTransition = { exit }
+                            ) {
+                                composable("journey") { DailyJourneyScreen14(entries, completions, today, prefs, model, navigate) }
+                                composable("amanah?create={create}", arguments = listOf(androidx.navigation.navArgument("create") { type = androidx.navigation.NavType.BoolType; defaultValue = false })) { entry -> EntryScreen("Amanah", "Your daily responsibilities", NurKind.AMANAH, entries, completions, today, model, initialAdd = entry.arguments?.getBoolean("create") == true) }
+                                composable("muhasaba") { EntryScreen("Muhasaba", "Reflect", NurKind.MUHASABA, entries, completions, today, model) }
+                                composable("rhythm") { EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model) }
+                                composable("history") { HistoryScreen(allEntries, completions) }
+                                composable("settings") { PowerSettingsScreen(prefs, model, navigate, lock) }
+                                composable("appearance") { AppearanceStudio27(prefs, model, refreshStatus, navigate) }
+                                composable("fonts") { NurFontSettingsScreen(prefs, model) }
+                                composable("navigation") { NavigationSettingsScreen(prefs, model) }
+                                composable("layout") { JourneyStudio14(prefs, model) }
+                                composable("insights") { InsightsScreen(allEntries, completions, today) }
+                                composable("backup") { BackupScreen() }
+                                composable("secure-backup") { SecureBackupScreen() }
+                                composable("backup-health") { BackupHealthScreen() }
+                                composable("privacy") { PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) } }
+                                composable("dhikr") { DhikrScreen(model, prefs, today) }
+                                composable("focus") { FocusScreen(focus) }
+                                composable("ai") { NurAiScreen(prefs, model) }
+                                composable("widgets") { NurWidgetSettingsScreen(prefs, model) }
+                                composable("accessibility") { NurAccessibilityScreen(prefs, model) }
+                                composable("reflections?verse={verse}", arguments = listOf(androidx.navigation.navArgument("verse") { type = androidx.navigation.NavType.StringType; defaultValue = "" })) { entry -> ReflectionScreen(entry.arguments?.getString("verse")) }
+                            }
                         }
                     }
                 }

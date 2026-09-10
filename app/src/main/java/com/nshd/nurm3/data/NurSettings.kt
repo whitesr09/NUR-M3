@@ -39,12 +39,29 @@ data class NurPreferences(
     val customFontName: String = "",
     val glassMode: String = "frosted",
     val glassIntensity: Float = 0.66f,
-    val glassBlurRadius: Int = 32
+    val glassBlurRadius: Int = 32,
+    val bottomNavigation: List<String> = NurBottomNavigationChoices.defaults
 )
 
 object NurFontChoices {
     val styles = listOf("default", "sans", "serif", "mono", "rounded", "custom")
     fun normalize(value: String?): String = value?.takeIf { it in styles } ?: "default"
+}
+
+/** Today is always present; users choose four of the five companion destinations. */
+object NurBottomNavigationChoices {
+    val optional = listOf("amanah", "focus", "muhasaba", "rhythm", "history")
+    val defaults = listOf("journey", "amanah", "focus", "rhythm", "history")
+
+    fun normalize(raw: String?): List<String> {
+        val chosen = raw.orEmpty().split(',').map(String::trim)
+            .filter { it in optional }.distinct().take(4)
+        val completed = (chosen + defaults.filter { it != "journey" } + optional).distinct().take(4)
+        return listOf("journey") + completed
+    }
+
+    fun valid(routes: List<String>): Boolean =
+        routes.size == 5 && routes.firstOrNull() == "journey" && routes.distinct().size == 5 && routes.drop(1).all { it in optional }
 }
 
 class NurSettings(private val context: Context) {
@@ -84,6 +101,7 @@ class NurSettings(private val context: Context) {
     private val glassMode = stringPreferencesKey("glass_mode")
     private val glassIntensity = floatPreferencesKey("glass_intensity")
     private val glassBlurRadius = intPreferencesKey("glass_blur_radius")
+    private val bottomNavigation = stringPreferencesKey("bottom_navigation")
 
     private fun options(p: Preferences) = JourneyOptions.restore(p[cardSizes], p[cardPinned], p[cardCollapsed])
     private fun writeOptions(p: MutablePreferences, value: JourneyOptions) {
@@ -133,7 +151,8 @@ class NurSettings(private val context: Context) {
             customFontName = p[customFontName].orEmpty().take(100),
             glassMode = selectedGlass,
             glassIntensity = (p[glassIntensity] ?: 0.66f).takeIf { it.isFinite() }?.coerceIn(0.25f, 1f) ?: 0.66f,
-            glassBlurRadius = (p[glassBlurRadius] ?: 32).coerceIn(0, 72)
+            glassBlurRadius = (p[glassBlurRadius] ?: 32).coerceIn(0, 72),
+            bottomNavigation = NurBottomNavigationChoices.normalize(p[bottomNavigation])
         )
     }
 
@@ -179,6 +198,11 @@ class NurSettings(private val context: Context) {
         context.nurDataStore.edit { it[glassBlurRadius] = value.coerceIn(0, 72) }
     }
 
+    suspend fun saveBottomNavigation(routes: List<String>) {
+        require(NurBottomNavigationChoices.valid(routes))
+        context.nurDataStore.edit { it[bottomNavigation] = routes.drop(1).joinToString(",") }
+    }
+
     suspend fun selectCustomFont(id: String, name: String) {
         require(id.matches(Regex("[a-f0-9]{64}")))
         context.nurDataStore.edit { p ->
@@ -222,7 +246,7 @@ class NurSettings(private val context: Context) {
     suspend fun resetAppearance() {
         context.nurDataStore.edit { p ->
             listOf(dark, dynamic, gold, motion, arabic, compact, shapes, highRefreshRate).forEach { p.remove(it) }
-            listOf(mode, palette, order, hidden, progressStyle, cardSizes, cardPinned, cardCollapsed, fontStyle, glassMode).forEach { p.remove(it) }
+            listOf(mode, palette, order, hidden, progressStyle, cardSizes, cardPinned, cardCollapsed, fontStyle, glassMode, bottomNavigation).forEach { p.remove(it) }
             listOf(scale, glassIntensity).forEach { p.remove(it) }
             p.remove(glassBlurRadius)
         }
