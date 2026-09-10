@@ -27,18 +27,22 @@ class NurAiRepository(context: Context) {
     private val modelName = "nur_ai_model"
 
     fun hasKey() = store.contains(keyName)
+
     fun saveKey(value: String) {
         require(value.isNotBlank() && value.length <= 512 && value.none { it.isWhitespace() })
         store.put(keyName, value)
     }
+
     fun clearKey() = store.clear(keyName)
 
     fun model(): String = store.get(modelName)?.takeIf(::validModel) ?: DEFAULT_MODEL
+
     fun saveModel(value: String) {
         val normalized = value.trim()
         require(validModel(normalized)) { "Use Auto or a valid Gemini model ID." }
         store.put(modelName, normalized)
     }
+
     fun resetModel() = store.clear(modelName)
 
     fun history(): List<AiMessage> = runCatching {
@@ -46,7 +50,12 @@ class NurAiRepository(context: Context) {
         val array = JSONArray(raw)
         (0 until array.length()).map { index ->
             val item = array.getJSONObject(index)
-            AiMessage(item.getString("id"), item.getString("role"), item.getString("text"), item.getLong("time"))
+            AiMessage(
+                item.getString("id"),
+                item.getString("role"),
+                item.getString("text"),
+                item.getLong("time")
+            )
         }.filter { it.role in setOf("user", "model") && it.text.length <= MAX_TEXT_CHARS }
     }.getOrDefault(emptyList())
 
@@ -55,12 +64,24 @@ class NurAiRepository(context: Context) {
         messages.takeLast(100).forEach {
             require(it.role in setOf("user", "model"))
             require(it.text.length <= MAX_TEXT_CHARS)
-            array.put(JSONObject().put("id", it.id).put("role", it.role).put("text", it.text).put("time", it.time))
+            array.put(
+                JSONObject()
+                    .put("id", it.id)
+                    .put("role", it.role)
+                    .put("text", it.text)
+                    .put("time", it.time)
+            )
         }
         store.put(historyName, array.toString())
     }
+
     fun clearHistory() = store.clear(historyName)
-    fun clearAll() { clearHistory(); clearKey(); resetModel() }
+
+    fun clearAll() {
+        clearHistory()
+        clearKey()
+        resetModel()
+    }
 
     private fun requestBody(messages: List<AiMessage>, useGrounding: Boolean): JSONObject {
         require(messages.isNotEmpty() && messages.last().role == "user")
@@ -69,35 +90,59 @@ class NurAiRepository(context: Context) {
             require(message.role in setOf("user", "model"))
             require(message.text.isNotBlank() && message.text.length <= 8000)
             contents.put(
-                JSONObject().put("role", message.role)
+                JSONObject()
+                    .put("role", message.role)
                     .put("parts", JSONArray().put(JSONObject().put("text", message.text)))
             )
         }
         val instruction = "You are NUR AI, a respectful Islamic learning and productivity companion. Explain clearly, distinguish verified Quran/Hadith text from your explanation, and never fabricate quotations, references, or religious rulings. If you cannot verify an exact reference, say so and recommend consulting a qualified scholar or the primary source. Acknowledge differences among recognized scholarly views without claiming universal authority. Do not diagnose mental health conditions. Do not claim to have changed the user's tasks or records."
         return JSONObject()
-            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", instruction))))
+            .put(
+                "systemInstruction",
+                JSONObject().put(
+                    "parts",
+                    JSONArray().put(JSONObject().put("text", instruction))
+                )
+            )
             .put("contents", contents)
-            .put("generationConfig", JSONObject().put("maxOutputTokens", 2048).put("temperature", 0.35))
-            .also { if (useGrounding) it.put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject()))) }
+            .put(
+                "generationConfig",
+                JSONObject().put("maxOutputTokens", 2048).put("temperature", 0.35)
+            )
+            .also {
+                if (useGrounding) {
+                    it.put(
+                        "tools",
+                        JSONArray().put(JSONObject().put("google_search", JSONObject()))
+                    )
+                }
+            }
     }
 
-    private fun connection(endpoint: String, key: String, method: String, accept: String): HttpURLConnection =
-        (URL(endpoint).openConnection() as HttpURLConnection).apply {
-            requestMethod = method
-            connectTimeout = 15_000
-            readTimeout = 60_000
-            instanceFollowRedirects = false
-            doOutput = method == "POST"
-            setRequestProperty("Accept", accept)
-            setRequestProperty("x-goog-api-key", key)
-            if (method == "POST") setRequestProperty("Content-Type", "application/json; charset=utf-8")
+    private fun connection(
+        endpoint: String,
+        key: String,
+        method: String,
+        accept: String
+    ): HttpURLConnection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
+        requestMethod = method
+        connectTimeout = 15_000
+        readTimeout = 60_000
+        instanceFollowRedirects = false
+        doOutput = method == "POST"
+        setRequestProperty("Accept", accept)
+        setRequestProperty("x-goog-api-key", key)
+        if (method == "POST") {
+            setRequestProperty("Content-Type", "application/json; charset=utf-8")
         }
+    }
 
     private fun serverMessage(connection: HttpURLConnection): String = runCatching {
         val stream = connection.errorStream ?: return@runCatching ""
         val raw = stream.bufferedReader(Charsets.UTF_8).use { it.readText().take(16_000) }
         JSONObject(raw).optJSONObject("error")?.optString("message").orEmpty()
-            .replace(Regex("\\s+"), " ").take(260)
+            .replace(Regex("\\s+"), " ")
+            .take(260)
     }.getOrDefault("")
 
     private fun requestFailure(connection: HttpURLConnection, code: Int): Exception {
@@ -121,7 +166,16 @@ class NurAiRepository(context: Context) {
 
     private fun isChatModel(id: String): Boolean {
         if (!id.startsWith("gemini-", ignoreCase = true)) return false
-        val blocked = listOf("image", "tts", "audio", "live", "embedding", "robotics", "computer-use", "deep-research")
+        val blocked = listOf(
+            "image",
+            "tts",
+            "audio",
+            "live",
+            "embedding",
+            "robotics",
+            "computer-use",
+            "deep-research"
+        )
         return blocked.none { id.contains(it, ignoreCase = true) }
     }
 
@@ -143,7 +197,9 @@ class NurAiRepository(context: Context) {
         try {
             val code = connection.responseCode
             if (code !in 200..299) throw requestFailure(connection, code)
-            val text = connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText().take(MAX_MODEL_LIST_CHARS) }
+            val text = connection.inputStream.bufferedReader(Charsets.UTF_8).use {
+                it.readText().take(MAX_MODEL_LIST_CHARS)
+            }
             val array = JSONObject(text).optJSONArray("models") ?: JSONArray()
             val result = mutableListOf<AiModelOption>()
             for (i in 0 until array.length()) {
@@ -152,9 +208,14 @@ class NurAiRepository(context: Context) {
                 if (!validModel(name) || !isChatModel(name)) continue
                 val methods = item.optJSONArray("supportedGenerationMethods") ?: JSONArray()
                 var supportsGenerate = false
-                for (m in 0 until methods.length()) if (methods.optString(m) == "generateContent") supportsGenerate = true
+                for (m in 0 until methods.length()) {
+                    if (methods.optString(m) == "generateContent") supportsGenerate = true
+                }
                 if (!supportsGenerate) continue
-                result += AiModelOption(name, item.optString("displayName").ifBlank { name }.take(120))
+                result += AiModelOption(
+                    name,
+                    item.optString("displayName").ifBlank { name }.take(120)
+                )
             }
             return result.distinctBy { it.id }
                 .sortedWith(compareBy<AiModelOption> { modelScore(it.id) }.thenBy { it.id })
@@ -180,12 +241,16 @@ class NurAiRepository(context: Context) {
     }
 
     private fun addSources(candidate: JSONObject, target: MutableList<AiSource>) {
-        val chunks = candidate.optJSONObject("groundingMetadata")?.optJSONArray("groundingChunks") ?: return
+        val chunks = candidate.optJSONObject("groundingMetadata")
+            ?.optJSONArray("groundingChunks") ?: return
         for (i in 0 until chunks.length()) {
             val web = chunks.optJSONObject(i)?.optJSONObject("web") ?: continue
             val uri = web.optString("uri")
             if (uri.startsWith("https://") && target.none { it.url == uri }) {
-                target += AiSource(web.optString("title").ifBlank { "Retrieved source" }.take(160), uri)
+                target += AiSource(
+                    web.optString("title").ifBlank { "Retrieved source" }.take(160),
+                    uri
+                )
             }
         }
     }
@@ -201,7 +266,9 @@ class NurAiRepository(context: Context) {
         val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$modelId:streamGenerateContent?alt=sse"
         val connection = connection(endpoint, key, "POST", "text/event-stream")
         try {
-            connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            connection.outputStream.use {
+                it.write(body.toString().toByteArray(Charsets.UTF_8))
+            }
             val code = connection.responseCode
             if (code !in 200..299) throw requestFailure(connection, code)
 
@@ -209,20 +276,41 @@ class NurAiRepository(context: Context) {
             val sources = mutableListOf<AiSource>()
             var rawChars = 0
             val eventData = StringBuilder()
+            var lastPartialNanos = 0L
+            var lastPartialLength = 0
+
+            suspend fun dispatchPartial(force: Boolean = false) {
+                if (aggregate.isEmpty()) return
+                val now = System.nanoTime()
+                val enoughTime = now - lastPartialNanos >= PARTIAL_UPDATE_NANOS
+                val enoughText = aggregate.length - lastPartialLength >= PARTIAL_UPDATE_MIN_CHARS
+                if (force || enoughTime || enoughText) {
+                    onPartial(aggregate.toString())
+                    lastPartialNanos = now
+                    lastPartialLength = aggregate.length
+                }
+            }
 
             suspend fun consumeEvent() {
                 if (eventData.isEmpty()) return
                 val payload = eventData.toString().trim()
                 eventData.clear()
                 if (payload.isEmpty() || payload == "[DONE]") return
-                val root = runCatching { JSONObject(payload) }.getOrElse { error("Gemini returned an invalid stream event.") }
-                root.optJSONObject("error")?.let { error(it.optString("message").ifBlank { "Gemini returned an error." }) }
+                val root = runCatching { JSONObject(payload) }
+                    .getOrElse { error("Gemini returned an invalid stream event.") }
+                root.optJSONObject("error")?.let {
+                    error(it.optString("message").ifBlank { "Gemini returned an error." })
+                }
                 val candidate = root.optJSONArray("candidates")?.optJSONObject(0) ?: return
                 val chunk = candidateText(candidate)
                 if (chunk.isNotEmpty()) {
-                    require(aggregate.length + chunk.length <= MAX_TEXT_CHARS) { "Response is too large." }
+                    require(aggregate.length + chunk.length <= MAX_TEXT_CHARS) {
+                        "Response is too large."
+                    }
                     aggregate.append(chunk)
-                    onPartial(aggregate.toString())
+                    // SSE can emit many tiny chunks. Updating Compose for every token causes visible
+                    // chat jitter, so dispatch at a capped cadence while preserving true streaming.
+                    dispatchPartial()
                 }
                 addSources(candidate, sources)
             }
@@ -231,7 +319,9 @@ class NurAiRepository(context: Context) {
                 while (true) {
                     val line = reader.readLine() ?: break
                     rawChars += line.length + 1
-                    require(rawChars <= MAX_STREAM_CHARS) { "Response stream is too large." }
+                    require(rawChars <= MAX_STREAM_CHARS) {
+                        "Response stream is too large."
+                    }
                     when {
                         line.isEmpty() -> consumeEvent()
                         line.startsWith("data:") -> {
@@ -242,7 +332,11 @@ class NurAiRepository(context: Context) {
                 }
                 consumeEvent()
             }
-            if (aggregate.isBlank()) error("Gemini returned no readable text. Try again.")
+
+            if (aggregate.isBlank()) {
+                error("Gemini returned no readable text. Try again.")
+            }
+            dispatchPartial(force = true)
             return AiReply(aggregate.toString(), sources.take(12), modelId)
         } finally {
             connection.disconnect()
@@ -275,13 +369,21 @@ class NurAiRepository(context: Context) {
             addAll(FALLBACK_MODELS)
         }.filter(::isChatModel).distinct().take(MAX_MODEL_ATTEMPTS)
 
-        if (candidates.isEmpty()) error("No compatible Gemini chat model is available for this key.")
+        if (candidates.isEmpty()) {
+            error("No compatible Gemini chat model is available for this key.")
+        }
         var lastFailure: Exception? = null
 
         for (candidate in candidates) {
             for (attempt in 0..1) {
                 try {
-                    return@withContext sendStreamingWithModel(key, candidate, messages, useGrounding, onPartial)
+                    return@withContext sendStreamingWithModel(
+                        key,
+                        candidate,
+                        messages,
+                        useGrounding,
+                        onPartial
+                    )
                 } catch (unavailable: ModelUnavailableException) {
                     lastFailure = unavailable
                     break
@@ -297,8 +399,11 @@ class NurAiRepository(context: Context) {
         )
     }
 
-    suspend fun send(messages: List<AiMessage>, consent: Boolean, useGrounding: Boolean = false): AiReply =
-        sendStreaming(messages, consent, useGrounding)
+    suspend fun send(
+        messages: List<AiMessage>,
+        consent: Boolean,
+        useGrounding: Boolean = false
+    ): AiReply = sendStreaming(messages, consent, useGrounding)
 
     companion object {
         const val AUTO_MODEL = "auto"
@@ -315,7 +420,10 @@ class NurAiRepository(context: Context) {
         private const val MAX_STREAM_CHARS = 1_048_576
         private const val MAX_MODEL_LIST_CHARS = 1_048_576
         private const val MAX_TEXT_CHARS = 32_000
+        private const val PARTIAL_UPDATE_MIN_CHARS = 16
+        private const val PARTIAL_UPDATE_NANOS = 50_000_000L
         private val MODEL_PATTERN = Regex("[A-Za-z0-9._-]{3,80}")
+
         fun validModel(value: String) = value == AUTO_MODEL || MODEL_PATTERN.matches(value)
         fun userMessage(text: String) = AiMessage(UUID.randomUUID().toString(), "user", text)
         fun modelMessage(text: String) = AiMessage(UUID.randomUUID().toString(), "model", text)
