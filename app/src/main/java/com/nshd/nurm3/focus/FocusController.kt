@@ -29,29 +29,54 @@ class FocusController(application: Application) : AndroidViewModel(application) 
     val message: StateFlow<String> = _message.asStateFlow()
     private var ticker: Job? = null
     private var clock: FocusClock? = null
+    private var ticksSinceCheckpoint = 0
+
+    companion object {
+        // The UI still updates every second, but durable writes do not need to happen every frame/tick.
+        private const val CHECKPOINT_EVERY_TICKS = 10
+        private const val TICK_MILLIS = 1000L
+    }
 
     init {
         viewModelScope.launch {
             try {
                 persistence.awaitReady()
                 dao.recoverableSession()?.let { if (_active.value == null) restore(it) }
-            } catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { _message.value = "Could not open saved Focus sessions." }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _message.value = "Could not open saved Focus sessions."
+            }
         }
     }
+
     private fun now() = SystemClock.elapsedRealtime()
     private fun persist(session: FocusSession) = persistence.submit(session)
     suspend fun flush() = persistence.flush()
-    private fun stopTicker() { ticker?.cancel(); ticker = null }
+
+    private fun stopTicker() {
+        ticker?.cancel()
+        ticker = null
+        ticksSinceCheckpoint = 0
+    }
+
     private fun snapshot(status: String? = null): FocusSession? {
         val current = _active.value ?: return null
         val elapsed = clock?.elapsed(now()) ?: current.elapsedSeconds * 1000L
-        return current.copy(elapsedSeconds = (elapsed / 1000L).toInt().coerceAtMost(current.plannedSeconds), status = status ?: current.status)
+        return current.copy(
+            elapsedSeconds = (elapsed / 1000L).toInt().coerceAtMost(current.plannedSeconds),
+            status = status ?: current.status
+        )
     }
+
     private fun updateRemaining() {
         val current = _active.value ?: return
-        _remaining.value = ((clock?.remaining(now()) ?: 0L) + 999L).div(1000L).toInt().coerceIn(0, current.plannedSeconds)
+        _remaining.value = ((clock?.remaining(now()) ?: 0L) + 999L)
+            .div(1000L)
+            .toInt()
+            .coerceIn(0, current.plannedSeconds)
     }
+
     private fun runTicker() {
         stopTicker()
         ticker = viewModelScope.launch {
@@ -59,24 +84,41 @@ class FocusController(application: Application) : AndroidViewModel(application) 
                 val current = _active.value ?: break
                 val time = clock ?: break
                 if (current.status != "running") break
-                if (time.elapsed(now()) >= time.targetMillis) { finish(); break }
+                if (time.elapsed(now()) >= time.targetMillis) {
+                    finish()
+                    break
+                }
+
                 updateRemaining()
-                snapshot()?.let(::persist)
-                delay(1000L)
+                ticksSinceCheckpoint += 1
+                if (ticksSinceCheckpoint >= CHECKPOINT_EVERY_TICKS) {
+                    snapshot()?.let(::persist)
+                    ticksSinceCheckpoint = 0
+                }
+                delay(TICK_MILLIS)
             }
         }
     }
+
     fun start(label: String, minutes: Int, routineId: String? = null) {
         if (!FocusRules.validMinutes(minutes) || label.isBlank() || _active.value?.status in setOf("running", "paused")) return
         stopTicker()
         clock = FocusClock(minutes * 60_000L).start(now())
-        val session = FocusSession(UUID.randomUUID().toString(), routineId, label.trim().take(120), minutes * 60, startedAt = System.currentTimeMillis(), status = "running")
+        val session = FocusSession(
+            UUID.randomUUID().toString(),
+            routineId,
+            label.trim().take(120),
+            minutes * 60,
+            startedAt = System.currentTimeMillis(),
+            status = "running"
+        )
         _active.value = session
         _message.value = ""
         updateRemaining()
         persist(session)
         runTicker()
     }
+
     fun resume() {
         val current = _active.value ?: return
         if (current.status != "paused") return
@@ -85,32 +127,48 @@ class FocusController(application: Application) : AndroidViewModel(application) 
         persist(_active.value!!)
         runTicker()
     }
+
     fun pause() {
         val current = _active.value ?: return
         if (current.status != "running") return
         stopTicker()
         val time = clock?.pause(now()) ?: return
         clock = time
-        val paused = current.copy(elapsedSeconds = (time.accruedMillis / 1000L).toInt(), status = "paused")
+        val paused = current.copy(
+            elapsedSeconds = (time.accruedMillis / 1000L).toInt(),
+            status = "paused"
+        )
         _active.value = paused
         updateRemaining()
+        // Always persist immediately at a lifecycle/action boundary.
         persist(paused)
     }
+
     fun finish() {
         val current = _active.value ?: return
         val time = clock ?: return
         if (current.status != "running" || time.elapsed(now()) < time.targetMillis) return
         stopTicker()
         clock = time.tick(now())
-        val completed = current.copy(elapsedSeconds = current.plannedSeconds, status = "completed", finishedAt = System.currentTimeMillis())
+        val completed = current.copy(
+            elapsedSeconds = current.plannedSeconds,
+            status = "completed",
+            finishedAt = System.currentTimeMillis()
+        )
         _active.value = completed
         _remaining.value = 0
         viewModelScope.launch {
-            try { persistence.save(completed); _message.value = "Focus session completed and saved." }
-            catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { _message.value = "The session finished, but saving failed. Do not clear app data; try again." }
+            try {
+                persistence.save(completed)
+                _message.value = "Focus session completed and saved."
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                _message.value = "The session finished, but saving failed. Do not clear app data; try again."
+            }
         }
     }
+
     fun cancel() {
         val current = _active.value ?: return
         if (current.status !in setOf("running", "paused")) return
@@ -121,6 +179,7 @@ class FocusController(application: Application) : AndroidViewModel(application) 
         _remaining.value = 0
         persist(cancelled)
     }
+
     fun restore(session: FocusSession) {
         if (_active.value?.status in setOf("running", "paused") || session.status !in setOf("paused", "running")) return
         stopTicker()
@@ -130,10 +189,27 @@ class FocusController(application: Application) : AndroidViewModel(application) 
         updateRemaining()
         persist(paused)
     }
+
     fun saveRoutine(name: String, work: Int, rest: Int) {
         if (name.isBlank() || !FocusRules.validMinutes(work) || rest !in 1..60) return
-        viewModelScope.launch { dao.saveRoutine(FocusRoutine(name = name.trim().take(100), workMinutes = work, restMinutes = rest)) }
+        viewModelScope.launch {
+            dao.saveRoutine(
+                FocusRoutine(
+                    name = name.trim().take(100),
+                    workMinutes = work,
+                    restMinutes = rest
+                )
+            )
+        }
     }
-    fun deleteRoutine(id: String) { viewModelScope.launch { dao.deleteRoutine(id) } }
-    override fun onCleared() { pause(); stopTicker(); super.onCleared() }
+
+    fun deleteRoutine(id: String) {
+        viewModelScope.launch { dao.deleteRoutine(id) }
+    }
+
+    override fun onCleared() {
+        pause()
+        stopTicker()
+        super.onCleared()
+    }
 }

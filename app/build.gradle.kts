@@ -12,8 +12,8 @@ android {
         applicationId = "com.nshd.nurm3"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.27.1-preview.1"
+        versionCode = 8
+        versionName = "0.28.0-preview.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -37,7 +37,16 @@ android {
         }
     }
     buildTypes {
-        debug { signingConfig = signingConfigs.getByName("nurStableDebug") }
+        debug {
+            signingConfig = signingConfigs.getByName("nurStableDebug")
+        }
+        create("optimized") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("nurStableDebug")
+            matchingFallbacks += listOf("debug")
+        }
         release {
             isMinifyEnabled = false
             signingConfig = signingConfigs.findByName("nurRelease")

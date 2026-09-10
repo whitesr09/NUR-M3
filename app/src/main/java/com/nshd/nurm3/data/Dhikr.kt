@@ -5,6 +5,7 @@ import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /** Personal counter goals are user choices, not prescribed religious counts. */
 @Entity(tableName = "dhikr_phrases", indices = [Index(value = ["position", "createdAt"])])
@@ -21,7 +22,14 @@ data class DhikrPhrase(
 @Entity(
     tableName = "dhikr_days",
     primaryKeys = ["phraseId", "localDate"],
-    foreignKeys = [ForeignKey(entity = DhikrPhrase::class, parentColumns = ["id"], childColumns = ["phraseId"], onDelete = ForeignKey.CASCADE)],
+    foreignKeys = [
+        ForeignKey(
+            entity = DhikrPhrase::class,
+            parentColumns = ["id"],
+            childColumns = ["phraseId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
     indices = [Index("phraseId"), Index("localDate")]
 )
 data class DhikrDay(val phraseId: String, val localDate: String, val count: Long)
@@ -31,13 +39,25 @@ data class DhikrSnapshot(val phrase: DhikrPhrase, val todayCount: Long, val life
 object DhikrRules {
     const val MAX_COUNT = 1_000_000_000_000L
     const val MAX_TARGET = 100_000
-    fun valid(phrase: DhikrPhrase): Boolean = phrase.id.isNotBlank() && phrase.id.length <= 128 &&
-        phrase.title.isNotBlank() && phrase.title.length <= 200 && phrase.target in 1..MAX_TARGET &&
-        phrase.sessionCount in 0..MAX_COUNT && phrase.createdAt >= 0
+
+    fun valid(phrase: DhikrPhrase): Boolean =
+        phrase.id.isNotBlank() && phrase.id.length <= 128 &&
+            phrase.title.isNotBlank() && phrase.title.length <= 200 &&
+            phrase.target in 1..MAX_TARGET &&
+            phrase.sessionCount in 0..MAX_COUNT &&
+            phrase.createdAt >= 0
+
     fun progress(count: Long, target: Int): Float =
-        if (target <= 0) 0f else (count.coerceAtLeast(0).coerceAtMost(target.toLong()).toFloat() / target).coerceIn(0f, 1f)
-    fun total(days: List<DhikrDay>): Long = days.fold(0L) { total, day -> Math.addExact(total, day.count) }
-    fun canIncrement(session: Long, daily: Long): Boolean = session in 0 until MAX_COUNT && daily in 0 until MAX_COUNT
+        if (target <= 0) 0f
+        else (count.coerceAtLeast(0).coerceAtMost(target.toLong()).toFloat() / target)
+            .coerceIn(0f, 1f)
+
+    fun total(days: List<DhikrDay>): Long =
+        days.fold(0L) { total, day -> Math.addExact(total, day.count) }
+
+    fun canIncrement(session: Long, daily: Long): Boolean =
+        session in 0 until MAX_COUNT && daily in 0 until MAX_COUNT
+
     fun next(session: Long, daily: Long): Pair<Long, Long> {
         require(canIncrement(session, daily)) { "Counter limit reached" }
         return session + 1 to daily + 1
@@ -48,30 +68,43 @@ object DhikrRules {
 interface DhikrDao {
     @Query("SELECT * FROM dhikr_phrases ORDER BY position, createdAt")
     fun observePhrases(): Flow<List<DhikrPhrase>>
+
     @Query("SELECT * FROM dhikr_days ORDER BY localDate DESC")
     fun observeDays(): Flow<List<DhikrDay>>
+
     @Query("SELECT * FROM dhikr_phrases ORDER BY position, createdAt")
     suspend fun getAllPhrases(): List<DhikrPhrase>
+
     @Query("SELECT * FROM dhikr_days ORDER BY localDate DESC")
     suspend fun getAllDays(): List<DhikrDay>
+
     @Query("SELECT * FROM dhikr_phrases WHERE id = :id LIMIT 1")
     suspend fun getPhrase(id: String): DhikrPhrase?
+
     @Query("SELECT * FROM dhikr_days WHERE phraseId = :id AND localDate = :date LIMIT 1")
     suspend fun getDay(id: String, date: String): DhikrDay?
+
     @Upsert
     suspend fun savePhrase(phrase: DhikrPhrase)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertPhraseIgnoringConflict(phrase: DhikrPhrase): Long
+
     @Upsert
     suspend fun saveDay(day: DhikrDay)
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertDayIgnoringConflict(day: DhikrDay): Long
+
     @Query("UPDATE dhikr_phrases SET sessionCount = 0 WHERE id = :id AND archived = 0")
     suspend fun resetSession(id: String)
+
     @Query("UPDATE dhikr_phrases SET archived = 1 WHERE id = :id")
     suspend fun archivePhrase(id: String)
+
     @Query("DELETE FROM dhikr_days")
     suspend fun clearDaysForRestore()
+
     @Query("DELETE FROM dhikr_phrases")
     suspend fun clearPhrasesForRestore()
 
@@ -91,23 +124,64 @@ interface DhikrDao {
     suspend fun seedDefaults() {
         listOf("SubhanAllah", "Alhamdulillah", "Allahu Akbar").forEachIndexed { index, title ->
             val id = "dhikr-${index + 1}"
-            if (getPhrase(id) == null) savePhrase(DhikrPhrase(id, title, 33, 0, index, System.currentTimeMillis()))
+            if (getPhrase(id) == null) {
+                savePhrase(
+                    DhikrPhrase(
+                        id,
+                        title,
+                        33,
+                        0,
+                        index,
+                        System.currentTimeMillis()
+                    )
+                )
+            }
         }
     }
 }
 
 class DhikrRepository(private val dao: DhikrDao) {
-    val phrases: Flow<List<DhikrPhrase>> = dao.observePhrases()
-    val days: Flow<List<DhikrDay>> = dao.observeDays()
+    val phrases: Flow<List<DhikrPhrase>> = dao.observePhrases().distinctUntilChanged()
+    val days: Flow<List<DhikrDay>> = dao.observeDays().distinctUntilChanged()
 
+    /**
+     * Build today's and lifetime counters in one pass. The previous filter + associate + groupBy
+     * pipeline created several full history collections after every Dhikr tap, which becomes
+     * noticeable as dated history grows.
+     */
     fun snapshots(date: LocalDate): Flow<List<DhikrSnapshot>> = combine(phrases, days) { phrases, days ->
-        val daily = days.filter { it.localDate == date.toString() }.associate { it.phraseId to it.count }
-        val totals = days.groupBy { it.phraseId }.mapValues { DhikrRules.total(it.value) }
-        phrases.filterNot { it.archived }.map { DhikrSnapshot(it, daily[it.id] ?: 0, totals[it.id] ?: 0) }
-    }
+        val dateKey = date.toString()
+        val today = HashMap<String, Long>(phrases.size)
+        val totals = HashMap<String, Long>(phrases.size)
+
+        for (day in days) {
+            totals[day.phraseId] = Math.addExact(totals[day.phraseId] ?: 0L, day.count)
+            if (day.localDate == dateKey) {
+                today[day.phraseId] = day.count
+            }
+        }
+
+        phrases.asSequence()
+            .filterNot { it.archived }
+            .map { phrase ->
+                DhikrSnapshot(
+                    phrase = phrase,
+                    todayCount = today[phrase.id] ?: 0L,
+                    lifetimeCount = totals[phrase.id] ?: 0L
+                )
+            }
+            .toList()
+    }.distinctUntilChanged()
 
     suspend fun add(title: String, target: Int) {
-        val phrase = DhikrPhrase(UUID.randomUUID().toString(), title.trim(), target, 0, dao.getAllPhrases().size, System.currentTimeMillis())
+        val phrase = DhikrPhrase(
+            UUID.randomUUID().toString(),
+            title.trim(),
+            target,
+            0,
+            dao.getAllPhrases().size,
+            System.currentTimeMillis()
+        )
         require(DhikrRules.valid(phrase)) { "Enter a phrase and a valid personal target" }
         dao.savePhrase(phrase)
     }
@@ -120,12 +194,16 @@ class DhikrRepository(private val dao: DhikrDao) {
         dao.savePhrase(updated)
     }
 
-    suspend fun increment(id: String, date: LocalDate): Boolean = dao.increment(id, date.toString())
+    suspend fun increment(id: String, date: LocalDate): Boolean =
+        dao.increment(id, date.toString())
+
     suspend fun resetSession(id: String) = dao.resetSession(id)
     suspend fun archive(id: String) = dao.archivePhrase(id)
+
     suspend fun restore(id: String) {
         val existing = dao.getPhrase(id) ?: return
         if (existing.archived) dao.savePhrase(existing.copy(archived = false))
     }
+
     suspend fun seedDefaults() = dao.seedDefaults()
 }
