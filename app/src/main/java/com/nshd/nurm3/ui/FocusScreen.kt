@@ -34,7 +34,7 @@ fun FocusScreen(controller: FocusController = viewModel()) {
     val completed = sessions.filter(FocusRules::completed)
     val today = java.time.LocalDate.now().toString()
     val todayCount = completed.count { it.finishedAt?.let { time -> Instant.ofEpochMilli(time).atZone(ZoneId.systemDefault()).toLocalDate().toString() == today } == true }
-    LazyColumn(contentPadding = PaddingValues(NurDesign.pagePadding), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(contentPadding = NurScrollContentPadding(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
         item { NurPageHeading("Work with intention", "Focus & Routine", "A quiet space for real work, rest and consistent habits.") }
         item {
             NurPanel(Modifier.fillMaxWidth()) {
