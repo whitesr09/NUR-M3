@@ -12,8 +12,8 @@ android {
         applicationId = "com.nshd.nurm3"
         minSdk = 26
         targetSdk = 35
-        versionCode = 8
-        versionName = "0.28.0-preview.1"
+        versionCode = 9
+        versionName = "0.28.1-preview.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
