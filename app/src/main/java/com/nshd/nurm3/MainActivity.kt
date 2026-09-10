@@ -47,47 +47,92 @@ class MainActivity : ComponentActivity() {
     private val requestedRoute = MutableStateFlow("")
     private var authResult: ((Boolean, String) -> Unit)? = null
 
-    override fun attachBaseContext(newBase: Context) { super.attachBaseContext(NurAccessibilityStore.localized(newBase)) }
+    override fun attachBaseContext(newBase: Context) {
+        super.attachBaseContext(NurAccessibilityStore.localized(newBase))
+    }
 
     private val credentialLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val callback = authResult
         authResult = null
-        callback?.invoke(result.resultCode == RESULT_OK, if (result.resultCode == RESULT_OK) "" else "Device authentication was cancelled")
+        callback?.invoke(
+            result.resultCode == RESULT_OK,
+            if (result.resultCode == RESULT_OK) "" else "Device authentication was cancelled"
+        )
     }
 
     private fun authenticateDevice(callback: (Boolean, String) -> Unit) {
-        if (authResult != null) { callback(false, "Authentication is already in progress"); return }
+        if (authResult != null) {
+            callback(false, "Authentication is already in progress")
+            return
+        }
         val manager = getSystemService(KeyguardManager::class.java)
-        if (!manager.isDeviceSecure) { callback(false, "Set a secure Android screen lock first"); return }
+        if (!manager.isDeviceSecure) {
+            callback(false, "Set a secure Android screen lock first")
+            return
+        }
         authResult = callback
         if (Build.VERSION.SDK_INT >= 30) {
             try {
                 val prompt = BiometricPrompt.Builder(this)
                     .setTitle("Unlock NUR")
                     .setSubtitle("Confirm your identity")
-                    .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.DEVICE_CREDENTIAL)
+                    .setAllowedAuthenticators(
+                        BiometricManager.Authenticators.BIOMETRIC_STRONG or
+                            BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                    )
                     .build()
-                prompt.authenticate(CancellationSignal(), mainExecutor, object : BiometricPrompt.AuthenticationCallback() {
-                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                        val next = authResult; authResult = null; next?.invoke(true, "")
+                prompt.authenticate(
+                    CancellationSignal(),
+                    mainExecutor,
+                    object : BiometricPrompt.AuthenticationCallback() {
+                        override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                            val next = authResult
+                            authResult = null
+                            next?.invoke(true, "")
+                        }
+
+                        override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                            val next = authResult
+                            authResult = null
+                            next?.invoke(false, errString.toString())
+                        }
                     }
-                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
-                        val next = authResult; authResult = null; next?.invoke(false, errString.toString())
-                    }
-                })
+                )
             } catch (error: Exception) {
-                val next = authResult; authResult = null; next?.invoke(false, error.message ?: "Authentication unavailable")
+                val next = authResult
+                authResult = null
+                next?.invoke(false, error.message ?: "Authentication unavailable")
             }
         } else {
-            val intent = manager.createConfirmDeviceCredentialIntent("Unlock NUR", "Confirm your screen lock")
-            if (intent != null) credentialLauncher.launch(intent)
-            else { authResult = null; callback(false, "Device credential unavailable") }
+            val intent = manager.createConfirmDeviceCredentialIntent(
+                "Unlock NUR",
+                "Confirm your screen lock"
+            )
+            if (intent != null) {
+                credentialLauncher.launch(intent)
+            } else {
+                authResult = null
+                callback(false, "Device credential unavailable")
+            }
         }
     }
 
     private fun acceptRoute(intent: Intent?) {
         val route = intent?.getStringExtra(NurWidgetProvider.EXTRA_ROUTE) ?: return
-        if (route in setOf("journey", "amanah", "amanah?create=true", "dhikr", "focus", "reflections", "settings", "ai")) requestedRoute.value = route
+        if (
+            route in setOf(
+                "journey",
+                "amanah",
+                "amanah?create=true",
+                "dhikr",
+                "focus",
+                "reflections",
+                "settings",
+                "ai"
+            )
+        ) {
+            requestedRoute.value = route
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -98,14 +143,34 @@ class MainActivity : ComponentActivity() {
         acceptRoute(intent)
         setContent {
             val route by requestedRoute.collectAsStateWithLifecycle()
-            NurApp(model, focus, lock, ::authenticateDevice, route) { requestedRoute.value = "" }
+            NurApp(model, focus, lock, ::authenticateDevice, route) {
+                requestedRoute.value = ""
+            }
         }
     }
 
-    override fun onNewIntent(intent: Intent) { super.onNewIntent(intent); setIntent(intent); acceptRoute(intent) }
-    override fun onResume() { super.onResume(); model.refreshDate(); NurWidgetProvider.refresh(this) }
-    override fun onStop() { focus.pause(); lock.lock(); super.onStop() }
-    override fun onDestroy() { authResult = null; super.onDestroy() }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        acceptRoute(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        model.refreshDate()
+        NurWidgetProvider.refresh(this)
+    }
+
+    override fun onStop() {
+        focus.pause()
+        lock.lock()
+        super.onStop()
+    }
+
+    override fun onDestroy() {
+        authResult = null
+        super.onDestroy()
+    }
 }
 
 @Composable
@@ -126,21 +191,32 @@ fun NurApp(
     val activity = androidx.compose.ui.platform.LocalContext.current as MainActivity
     val accessStore = remember(activity) { NurAccessibilityStore.get(activity) }
     val accessibility by accessStore.settings.collectAsStateWithLifecycle()
-    val prefs = savedPrefs.copy(
-        typeScale = (savedPrefs.typeScale * accessibility.textScale).coerceIn(0.85f, 2f),
-        reduceMotion = savedPrefs.reduceMotion || accessibility.reduceMotion || !android.animation.ValueAnimator.areAnimatorsEnabled(),
-        compactCards = savedPrefs.compactCards && accessibility.textScale <= 1.1f
-    )
-    val refreshStatus by activity.refreshController.status.collectAsStateWithLifecycle()
+
+    // Keep a stable preference object across navigation and other unrelated recompositions.
+    val prefs = remember(savedPrefs, accessibility) {
+        savedPrefs.copy(
+            typeScale = (savedPrefs.typeScale * accessibility.textScale).coerceIn(0.85f, 2f),
+            reduceMotion = savedPrefs.reduceMotion ||
+                accessibility.reduceMotion ||
+                !android.animation.ValueAnimator.areAnimatorsEnabled(),
+            compactCards = savedPrefs.compactCards && accessibility.textScale <= 1.1f
+        )
+    }
+
     val nav = rememberNavController()
-    val current = (nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey").substringBefore("?")
+    val current = (nav.currentBackStackEntryAsState().value?.destination?.route ?: "journey")
+        .substringBefore("?")
     val snackbar = remember { SnackbarHostState() }
     var showGuide by rememberSaveable {
-        mutableStateOf(!activity.getSharedPreferences("nur_onboarding", Context.MODE_PRIVATE).getBoolean("guide_seen", false))
+        mutableStateOf(
+            !activity.getSharedPreferences("nur_onboarding", Context.MODE_PRIVATE)
+                .getBoolean("guide_seen", false)
+        )
     }
+    val systemDark = isSystemInDarkTheme()
     val dark = when (prefs.themeMode) {
         "light" -> false
-        "system" -> isSystemInDarkTheme()
+        "system" -> systemDark
         else -> true
     }
     val tabs = remember(prefs.bottomNavigation) { resolveNurTabs(prefs.bottomNavigation) }
@@ -150,7 +226,10 @@ fun NurApp(
     LaunchedEffect(prefs.highRefreshRate, locked) {
         activity.refreshController.setEnabled(prefs.highRefreshRate && !locked)
     }
-    SideEffect {
+
+    // Window operations are comparatively expensive. Run them only when their real inputs change,
+    // not after every successful Compose recomposition.
+    LaunchedEffect(locked, prefs.privatePreview, current, dark) {
         if (locked || prefs.privatePreview || current in setOf("ai", "secure-backup")) {
             activity.window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         } else {
@@ -161,15 +240,21 @@ fun NurApp(
             isAppearanceLightNavigationBars = !dark
         }
     }
+
+    // Date refresh does not need a 30-second wake-up. MutableStateFlow also suppresses equal dates.
     LaunchedEffect(Unit) {
         while (true) {
             model.refreshDate()
-            delay(30_000)
+            delay(60_000L)
         }
     }
+
     LaunchedEffect(model, locked) {
-        if (!locked) model.uiEvents.collectLatest { snackbar.showSnackbar(it) }
+        if (!locked) {
+            model.uiEvents.collectLatest { snackbar.showSnackbar(it) }
+        }
     }
+
     LaunchedEffect(entries, completions, today, prefs.widgetsEnabled) {
         NurWidgetProvider.refresh(activity)
     }
@@ -200,8 +285,16 @@ fun NurApp(
                     }
                 }
 
-                val enter = if (prefs.reduceMotion) EnterTransition.None else fadeIn(tween(220))
-                val exit = if (prefs.reduceMotion) ExitTransition.None else fadeOut(tween(120))
+                val enter = if (prefs.reduceMotion) {
+                    EnterTransition.None
+                } else {
+                    fadeIn(tween(160))
+                }
+                val exit = if (prefs.reduceMotion) {
+                    ExitTransition.None
+                } else {
+                    fadeOut(tween(90))
+                }
 
                 Surface(
                     modifier = Modifier.fillMaxSize(),
@@ -216,12 +309,16 @@ fun NurApp(
                                 current,
                                 today,
                                 tabs = tabs,
-                                onBack = { if (!nav.popBackStack()) navigate("journey") },
+                                onBack = {
+                                    if (!nav.popBackStack()) navigate("journey")
+                                },
                                 onSettings = { navigate("settings") }
                             )
                         },
                         bottomBar = {
-                            if (showBottomBar) NurBottomBar(current, tabs, navigate)
+                            if (showBottomBar) {
+                                NurBottomBar(current, tabs, navigate)
+                            }
                         },
                         floatingActionButton = {
                             if (current != "ai") {
@@ -273,29 +370,75 @@ fun NurApp(
                                 )
                             }
                             composable("muhasaba") {
-                                EntryScreen("Muhasaba", "Reflect", NurKind.MUHASABA, entries, completions, today, model)
+                                EntryScreen(
+                                    "Muhasaba",
+                                    "Reflect",
+                                    NurKind.MUHASABA,
+                                    entries,
+                                    completions,
+                                    today,
+                                    model
+                                )
                             }
                             composable("rhythm") {
-                                EntryScreen("Rhythm", "Build consistent habits", NurKind.RHYTHM, entries, completions, today, model)
+                                EntryScreen(
+                                    "Rhythm",
+                                    "Build consistent habits",
+                                    NurKind.RHYTHM,
+                                    entries,
+                                    completions,
+                                    today,
+                                    model
+                                )
                             }
-                            composable("history") { HistoryScreen(allEntries, completions) }
-                            composable("settings") { PowerSettingsScreen(prefs, model, navigate, lock) }
-                            composable("appearance") { AppearanceStudio27(prefs, model, refreshStatus, navigate) }
-                            composable("fonts") { NurFontSettingsScreen(prefs, model) }
-                            composable("navigation") { NavigationSettingsScreen(prefs, model) }
-                            composable("layout") { JourneyStudio14(prefs, model) }
-                            composable("insights") { InsightsScreen(allEntries, completions, today) }
+                            composable("history") {
+                                HistoryScreen(allEntries, completions)
+                            }
+                            composable("settings") {
+                                PowerSettingsScreen(prefs, model, navigate, lock)
+                            }
+                            composable("appearance") {
+                                // Refresh-rate status is observed only on the screen that displays it.
+                                // Display callbacks can no longer recompose the entire app shell.
+                                val refreshStatus by activity.refreshController.status
+                                    .collectAsStateWithLifecycle()
+                                AppearanceStudio27(prefs, model, refreshStatus, navigate)
+                            }
+                            composable("fonts") {
+                                NurFontSettingsScreen(prefs, model)
+                            }
+                            composable("navigation") {
+                                NavigationSettingsScreen(prefs, model)
+                            }
+                            composable("layout") {
+                                JourneyStudio14(prefs, model)
+                            }
+                            composable("insights") {
+                                InsightsScreen(allEntries, completions, today)
+                            }
                             composable("backup") { BackupScreen() }
                             composable("secure-backup") { SecureBackupScreen() }
                             composable("backup-health") { BackupHealthScreen() }
                             composable("privacy") {
-                                PrivacyScreen(lock, prefs.privatePreview) { model.setting("private_preview", it) }
+                                PrivacyScreen(lock, prefs.privatePreview) {
+                                    model.setting("private_preview", it)
+                                }
                             }
-                            composable("dhikr") { DhikrScreen(model, prefs, today) }
-                            composable("focus") { FocusScreen(focus) }
-                            composable("ai") { NurAiScreen(prefs, model) }
-                            composable("widgets") { NurWidgetSettingsScreen(prefs, model) }
-                            composable("accessibility") { NurAccessibilityScreen(prefs, model) }
+                            composable("dhikr") {
+                                DhikrScreen(model, prefs, today)
+                            }
+                            composable("focus") {
+                                FocusScreen(focus)
+                            }
+                            composable("ai") {
+                                NurAiScreen(prefs, model)
+                            }
+                            composable("widgets") {
+                                NurWidgetSettingsScreen(prefs, model)
+                            }
+                            composable("accessibility") {
+                                NurAccessibilityScreen(prefs, model)
+                            }
                             composable(
                                 "reflections?verse={verse}",
                                 arguments = listOf(
