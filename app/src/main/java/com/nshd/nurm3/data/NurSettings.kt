@@ -121,7 +121,7 @@ class NurSettings(private val context: Context) {
 
     val preferences: Flow<NurPreferences> = context.nurDataStore.data.map { p ->
         val selectedMode = AppearanceChoices.mode(p[mode] ?: if (p[dark] ?: true) "dark" else "light")
-        val selectedPalette = p[palette]?.takeIf { it in setOf("gold", "ocean", "sage", "rose") } ?: if (p[gold] ?: true) "gold" else "ocean"
+        val selectedPalette = p[palette]?.takeIf { it in setOf("gold", "ocean", "sage", "rose", "emerald", "violet") } ?: if (p[gold] ?: true) "gold" else "ocean"
         val selectedGlass = p[glassMode]?.takeIf { it in setOf("off", "subtle", "frosted", "liquid") } ?: "frosted"
         NurPreferences(
             darkMode = selectedMode == "dark" || selectedMode == "amoled" || selectedMode == "system" && (p[dark] ?: true),
@@ -182,7 +182,7 @@ class NurSettings(private val context: Context) {
         context.nurDataStore.edit { p ->
             when (key) {
                 "mode" -> if (value in AppearanceChoices.modes) { p[mode] = value; p[dark] = value != "light" }
-                "palette" -> if (value in listOf("gold", "ocean", "sage", "rose")) { p[palette] = value; p[gold] = value == "gold" }
+                "palette" -> if (value in listOf("gold", "ocean", "sage", "rose", "emerald", "violet")) { p[palette] = value; p[gold] = value == "gold" }
                 "progress_style" -> if (value in AppearanceChoices.progressStyles) p[progressStyle] = value
                 "font_style" -> if (value in NurFontChoices.styles && (value != "custom" || !p[customFontId].isNullOrBlank())) p[fontStyle] = value
                 "glass_mode" -> if (value in setOf("off", "subtle", "frosted", "liquid")) p[glassMode] = value

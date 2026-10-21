@@ -418,8 +418,8 @@ fun NurAiScreen(prefs: NurPreferences, model: NurViewModel) {
 @Composable
 private fun AiBubble27(message: AiMessage, typing: Boolean, streaming: Boolean, onCopy: () -> Unit) {
     val user = message.role == "user"
-    val bubble = if (user) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh
-    val content = if (user) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface
+    val bubble = if (user) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHigh
+    val content = if (user) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
     val shape = RoundedCornerShape(
         topStart = 22.dp,
         topEnd = 22.dp,

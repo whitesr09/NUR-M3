@@ -25,6 +25,8 @@ class NurAiRepository(context: Context) {
     private val keyName = "nur_ai_api_key"
     private val historyName = "nur_ai_history"
     private val modelName = "nur_ai_model"
+    private val modelsCacheName = "nur_ai_models_cache"
+    private val modelsCacheAtName = "nur_ai_models_cache_at"
 
     fun hasKey() = store.contains(keyName)
 
@@ -81,6 +83,39 @@ class NurAiRepository(context: Context) {
         clearHistory()
         clearKey()
         resetModel()
+        store.clear(modelsCacheName)
+        store.clear(modelsCacheAtName)
+    }
+
+    /**
+     * Discovered models are cached on-device so sending a message never waits on a
+     * /models round-trip first. Discovery only runs on demand (settings test, stale
+     * cache, or no cache), which keeps time-to-first-token to a single request.
+     */
+    private fun cachedModels(): List<AiModelOption> = runCatching {
+        val raw = store.get(modelsCacheName) ?: return@runCatching emptyList()
+        val array = JSONArray(raw)
+        (0 until array.length()).map { index ->
+            val item = array.getJSONObject(index)
+            AiModelOption(
+                item.getString("id"),
+                item.optString("name").ifBlank { item.getString("id") }
+            )
+        }.filter { validModel(it.id) && isChatModel(it.id) }
+    }.getOrDefault(emptyList())
+
+    private fun modelsCacheAgeMs(): Long {
+        val at = store.get(modelsCacheAtName)?.toLongOrNull() ?: return Long.MAX_VALUE
+        return (System.currentTimeMillis() - at).coerceAtLeast(0L)
+    }
+
+    private fun saveCachedModels(models: List<AiModelOption>) {
+        val array = JSONArray()
+        models.forEach {
+            array.put(JSONObject().put("id", it.id).put("name", it.displayName))
+        }
+        store.put(modelsCacheName, array.toString())
+        store.put(modelsCacheAtName, System.currentTimeMillis().toString())
     }
 
     private fun requestBody(messages: List<AiMessage>, useGrounding: Boolean): JSONObject {
@@ -227,7 +262,7 @@ class NurAiRepository(context: Context) {
     suspend fun discoverModels(consent: Boolean): List<AiModelOption> = withContext(Dispatchers.IO) {
         require(consent) { "Enable NUR AI network access first." }
         val key = store.get(keyName) ?: error("Add your Gemini API key first.")
-        listModels(key)
+        listModels(key).also { saveCachedModels(it) }
     }
 
     private fun candidateText(candidate: JSONObject): String {
@@ -357,10 +392,18 @@ class NurAiRepository(context: Context) {
         val key = store.get(keyName) ?: error("Add your Gemini API key first.")
         val selected = model()
 
-        val discovered = try {
-            listModels(key)
-        } catch (transient: TransientGeminiException) {
-            emptyList()
+        // Fast path: a pinned model or a fresh discovery cache means the first token
+        // needs no /models round-trip. A stale cache still beats blind fallbacks when
+        // discovery itself is temporarily unreachable.
+        val cached = cachedModels()
+        val discovered = when {
+            selected != AUTO_MODEL -> cached
+            cached.isNotEmpty() && modelsCacheAgeMs() < MODELS_CACHE_TTL_MS -> cached
+            else -> try {
+                listModels(key).also { saveCachedModels(it) }
+            } catch (transient: TransientGeminiException) {
+                cached
+            }
         }
 
         val candidates = buildList {
@@ -417,6 +460,7 @@ class NurAiRepository(context: Context) {
         )
         val MODEL_PRESETS = listOf(AUTO_MODEL) + FALLBACK_MODELS
         private const val MAX_MODEL_ATTEMPTS = 8
+        private const val MODELS_CACHE_TTL_MS = 24L * 60L * 60L * 1_000L
         private const val MAX_STREAM_CHARS = 1_048_576
         private const val MAX_MODEL_LIST_CHARS = 1_048_576
         private const val MAX_TEXT_CHARS = 32_000
