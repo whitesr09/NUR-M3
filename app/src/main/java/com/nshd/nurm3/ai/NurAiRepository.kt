@@ -2,11 +2,13 @@ package com.nshd.nurm3.ai
 
 import android.content.Context
 import com.nshd.nurm3.data.NurPrivateStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
@@ -25,15 +27,22 @@ class NurAiRepository(context: Context) {
     private val keyName = "nur_ai_api_key"
     private val historyName = "nur_ai_history"
     private val modelName = "nur_ai_model"
+    private val modelsCacheName = "nur_ai_models_cache"
+    private val modelsCacheAtName = "nur_ai_models_cache_at"
 
     fun hasKey() = store.contains(keyName)
 
     fun saveKey(value: String) {
         require(value.isNotBlank() && value.length <= 512 && value.none { it.isWhitespace() })
         store.put(keyName, value)
+        // The cached model list belongs to the previous key; never reuse it.
+        clearModelsCache()
     }
 
-    fun clearKey() = store.clear(keyName)
+    fun clearKey() {
+        store.clear(keyName)
+        clearModelsCache()
+    }
 
     fun model(): String = store.get(modelName)?.takeIf(::validModel) ?: DEFAULT_MODEL
 
@@ -81,6 +90,42 @@ class NurAiRepository(context: Context) {
         clearHistory()
         clearKey()
         resetModel()
+    }
+
+    private fun clearModelsCache() {
+        store.clear(modelsCacheName)
+        store.clear(modelsCacheAtName)
+    }
+
+    /**
+     * Discovered models are cached on-device so sending a message never waits on a
+     * /models round-trip first. Discovery only runs on demand (settings test, stale
+     * cache, or no cache), which keeps time-to-first-token to a single request.
+     */
+    private fun cachedModels(): List<AiModelOption> = runCatching {
+        val raw = store.get(modelsCacheName) ?: return@runCatching emptyList()
+        val array = JSONArray(raw)
+        (0 until array.length()).map { index ->
+            val item = array.getJSONObject(index)
+            AiModelOption(
+                item.getString("id"),
+                item.optString("name").ifBlank { item.getString("id") }
+            )
+        }.filter { validModel(it.id) && isChatModel(it.id) }
+    }.getOrDefault(emptyList())
+
+    private fun modelsCacheAgeMs(): Long {
+        val at = store.get(modelsCacheAtName)?.toLongOrNull() ?: return Long.MAX_VALUE
+        return (System.currentTimeMillis() - at).coerceAtLeast(0L)
+    }
+
+    private fun saveCachedModels(models: List<AiModelOption>) {
+        val array = JSONArray()
+        models.forEach {
+            array.put(JSONObject().put("id", it.id).put("name", it.displayName))
+        }
+        store.put(modelsCacheName, array.toString())
+        store.put(modelsCacheAtName, System.currentTimeMillis().toString())
     }
 
     private fun requestBody(messages: List<AiMessage>, useGrounding: Boolean): JSONObject {
@@ -227,7 +272,7 @@ class NurAiRepository(context: Context) {
     suspend fun discoverModels(consent: Boolean): List<AiModelOption> = withContext(Dispatchers.IO) {
         require(consent) { "Enable NUR AI network access first." }
         val key = store.get(keyName) ?: error("Add your Gemini API key first.")
-        listModels(key)
+        listModels(key).also { saveCachedModels(it) }
     }
 
     private fun candidateText(candidate: JSONObject): String {
@@ -344,8 +389,11 @@ class NurAiRepository(context: Context) {
     }
 
     /**
-     * Auto mode discovers models exposed to the key. Transient 408/429/5xx failures retry the
-     * same candidate and then move to the next compatible model, while retired models are skipped.
+     * Sends with the fastest viable model. The first pass uses a pinned model or the
+     * on-device discovery cache (24h) so the first token skips the /models round-trip.
+     * Transient 408/429/5xx failures retry the same candidate then move on, while
+     * retired models are skipped. If every candidate fails and discovery was not
+     * freshly fetched, discovery is refreshed once and the live list is retried.
      */
     suspend fun sendStreaming(
         messages: List<AiMessage>,
@@ -357,27 +405,77 @@ class NurAiRepository(context: Context) {
         val key = store.get(keyName) ?: error("Add your Gemini API key first.")
         val selected = model()
 
-        val discovered = try {
-            listModels(key)
-        } catch (transient: TransientGeminiException) {
-            emptyList()
+        // Fast path: a pinned model or a fresh discovery cache means the first token
+        // needs no /models round-trip. A stale cache still beats blind fallbacks when
+        // discovery itself is temporarily unreachable.
+        val cached = cachedModels()
+        var discoveryFresh = false
+        val discovered = when {
+            selected != AUTO_MODEL -> cached
+            cached.isNotEmpty() && modelsCacheAgeMs() < MODELS_CACHE_TTL_MS -> cached
+            else -> try {
+                listModels(key).also {
+                    saveCachedModels(it)
+                    discoveryFresh = true
+                }
+            } catch (transient: TransientGeminiException) {
+                cached
+            } catch (io: IOException) {
+                cached
+            }
         }
 
-        val candidates = buildList {
+        val state = SendAttemptState()
+        val candidates = buildCandidates(selected, discovered)
+        if (candidates.isEmpty()) {
+            error("No compatible Gemini chat model is available for this key.")
+        }
+        attemptCandidates(key, candidates, messages, useGrounding, onPartial, state)
+            ?.let { return@withContext it }
+
+        if (!discoveryFresh) {
+            val refreshed = try {
+                listModels(key).also { saveCachedModels(it) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                emptyList()
+            }
+            val retryCandidates = buildCandidates(selected, refreshed)
+            if (retryCandidates.isNotEmpty() && retryCandidates != candidates) {
+                attemptCandidates(key, retryCandidates, messages, useGrounding, onPartial, state)
+                    ?.let { return@withContext it }
+            }
+        }
+
+        throw IllegalStateException(
+            "NUR AI tried the compatible Gemini models but the service stayed temporarily unavailable. Please send the message again in a moment.${state.lastFailure?.message?.let { " $it" }.orEmpty()}"
+        )
+    }
+
+    private fun buildCandidates(selected: String, discovered: List<AiModelOption>): List<String> =
+        buildList {
             if (selected != AUTO_MODEL && isChatModel(selected)) add(selected)
             addAll(discovered.map { it.id })
             addAll(FALLBACK_MODELS)
         }.filter(::isChatModel).distinct().take(MAX_MODEL_ATTEMPTS)
 
-        if (candidates.isEmpty()) {
-            error("No compatible Gemini chat model is available for this key.")
-        }
+    private class SendAttemptState {
         var lastFailure: Exception? = null
+    }
 
+    private suspend fun attemptCandidates(
+        key: String,
+        candidates: List<String>,
+        messages: List<AiMessage>,
+        useGrounding: Boolean,
+        onPartial: suspend (String) -> Unit,
+        state: SendAttemptState
+    ): AiReply? {
         for (candidate in candidates) {
             for (attempt in 0..1) {
                 try {
-                    return@withContext sendStreamingWithModel(
+                    return sendStreamingWithModel(
                         key,
                         candidate,
                         messages,
@@ -385,18 +483,15 @@ class NurAiRepository(context: Context) {
                         onPartial
                     )
                 } catch (unavailable: ModelUnavailableException) {
-                    lastFailure = unavailable
+                    state.lastFailure = unavailable
                     break
                 } catch (transient: TransientGeminiException) {
-                    lastFailure = transient
+                    state.lastFailure = transient
                     if (attempt == 0) delay(450L) else break
                 }
             }
         }
-
-        throw IllegalStateException(
-            "NUR AI tried the compatible Gemini models but the service stayed temporarily unavailable. Please send the message again in a moment.${lastFailure?.message?.let { " $it" }.orEmpty()}"
-        )
+        return null
     }
 
     suspend fun send(
@@ -417,6 +512,7 @@ class NurAiRepository(context: Context) {
         )
         val MODEL_PRESETS = listOf(AUTO_MODEL) + FALLBACK_MODELS
         private const val MAX_MODEL_ATTEMPTS = 8
+        private const val MODELS_CACHE_TTL_MS = 24L * 60L * 60L * 1_000L
         private const val MAX_STREAM_CHARS = 1_048_576
         private const val MAX_MODEL_LIST_CHARS = 1_048_576
         private const val MAX_TEXT_CHARS = 32_000

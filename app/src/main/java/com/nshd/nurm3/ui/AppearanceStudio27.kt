@@ -313,7 +313,9 @@ fun AppearanceStudio27(
                 Triple("gold", "Signature gold", Color(0xFFD9B96F)),
                 Triple("ocean", "Ocean blue", Color(0xFF638FA9)),
                 Triple("sage", "Sage green", Color(0xFF71977D)),
-                Triple("rose", "Soft rose", Color(0xFFB98091))
+                Triple("rose", "Soft rose", Color(0xFFB98091)),
+                Triple("emerald", "Emerald", Color(0xFF3E9B6C)),
+                Triple("violet", "Violet", Color(0xFF7A5CC0))
             ).forEach { (id, title, swatch) ->
                 StudioPaletteOption27(
                     title = title,
