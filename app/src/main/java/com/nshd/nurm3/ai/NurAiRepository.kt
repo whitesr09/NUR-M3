@@ -2,11 +2,13 @@ package com.nshd.nurm3.ai
 
 import android.content.Context
 import com.nshd.nurm3.data.NurPrivateStore
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
 import java.util.UUID
@@ -33,9 +35,14 @@ class NurAiRepository(context: Context) {
     fun saveKey(value: String) {
         require(value.isNotBlank() && value.length <= 512 && value.none { it.isWhitespace() })
         store.put(keyName, value)
+        // The cached model list belongs to the previous key; never reuse it.
+        clearModelsCache()
     }
 
-    fun clearKey() = store.clear(keyName)
+    fun clearKey() {
+        store.clear(keyName)
+        clearModelsCache()
+    }
 
     fun model(): String = store.get(modelName)?.takeIf(::validModel) ?: DEFAULT_MODEL
 
@@ -83,6 +90,9 @@ class NurAiRepository(context: Context) {
         clearHistory()
         clearKey()
         resetModel()
+    }
+
+    private fun clearModelsCache() {
         store.clear(modelsCacheName)
         store.clear(modelsCacheAtName)
     }
@@ -379,8 +389,11 @@ class NurAiRepository(context: Context) {
     }
 
     /**
-     * Auto mode discovers models exposed to the key. Transient 408/429/5xx failures retry the
-     * same candidate and then move to the next compatible model, while retired models are skipped.
+     * Sends with the fastest viable model. The first pass uses a pinned model or the
+     * on-device discovery cache (24h) so the first token skips the /models round-trip.
+     * Transient 408/429/5xx failures retry the same candidate then move on, while
+     * retired models are skipped. If every candidate fails and discovery was not
+     * freshly fetched, discovery is refreshed once and the live list is retried.
      */
     suspend fun sendStreaming(
         messages: List<AiMessage>,
@@ -396,31 +409,73 @@ class NurAiRepository(context: Context) {
         // needs no /models round-trip. A stale cache still beats blind fallbacks when
         // discovery itself is temporarily unreachable.
         val cached = cachedModels()
+        var discoveryFresh = false
         val discovered = when {
             selected != AUTO_MODEL -> cached
             cached.isNotEmpty() && modelsCacheAgeMs() < MODELS_CACHE_TTL_MS -> cached
             else -> try {
-                listModels(key).also { saveCachedModels(it) }
+                listModels(key).also {
+                    saveCachedModels(it)
+                    discoveryFresh = true
+                }
             } catch (transient: TransientGeminiException) {
+                cached
+            } catch (io: IOException) {
                 cached
             }
         }
 
-        val candidates = buildList {
+        val state = SendAttemptState()
+        val candidates = buildCandidates(selected, discovered)
+        if (candidates.isEmpty()) {
+            error("No compatible Gemini chat model is available for this key.")
+        }
+        attemptCandidates(key, candidates, messages, useGrounding, onPartial, state)
+            ?.let { return@withContext it }
+
+        if (!discoveryFresh) {
+            val refreshed = try {
+                listModels(key).also { saveCachedModels(it) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                emptyList()
+            }
+            val retryCandidates = buildCandidates(selected, refreshed)
+            if (retryCandidates.isNotEmpty() && retryCandidates != candidates) {
+                attemptCandidates(key, retryCandidates, messages, useGrounding, onPartial, state)
+                    ?.let { return@withContext it }
+            }
+        }
+
+        throw IllegalStateException(
+            "NUR AI tried the compatible Gemini models but the service stayed temporarily unavailable. Please send the message again in a moment.${state.lastFailure?.message?.let { " $it" }.orEmpty()}"
+        )
+    }
+
+    private fun buildCandidates(selected: String, discovered: List<AiModelOption>): List<String> =
+        buildList {
             if (selected != AUTO_MODEL && isChatModel(selected)) add(selected)
             addAll(discovered.map { it.id })
             addAll(FALLBACK_MODELS)
         }.filter(::isChatModel).distinct().take(MAX_MODEL_ATTEMPTS)
 
-        if (candidates.isEmpty()) {
-            error("No compatible Gemini chat model is available for this key.")
-        }
+    private class SendAttemptState {
         var lastFailure: Exception? = null
+    }
 
+    private suspend fun attemptCandidates(
+        key: String,
+        candidates: List<String>,
+        messages: List<AiMessage>,
+        useGrounding: Boolean,
+        onPartial: suspend (String) -> Unit,
+        state: SendAttemptState
+    ): AiReply? {
         for (candidate in candidates) {
             for (attempt in 0..1) {
                 try {
-                    return@withContext sendStreamingWithModel(
+                    return sendStreamingWithModel(
                         key,
                         candidate,
                         messages,
@@ -428,18 +483,15 @@ class NurAiRepository(context: Context) {
                         onPartial
                     )
                 } catch (unavailable: ModelUnavailableException) {
-                    lastFailure = unavailable
+                    state.lastFailure = unavailable
                     break
                 } catch (transient: TransientGeminiException) {
-                    lastFailure = transient
+                    state.lastFailure = transient
                     if (attempt == 0) delay(450L) else break
                 }
             }
         }
-
-        throw IllegalStateException(
-            "NUR AI tried the compatible Gemini models but the service stayed temporarily unavailable. Please send the message again in a moment.${lastFailure?.message?.let { " $it" }.orEmpty()}"
-        )
+        return null
     }
 
     suspend fun send(
