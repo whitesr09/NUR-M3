@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PharmaSphere — Myree, Aspiring Pharmacist</title>
+<meta name="description" content="Exploring the science behind medicines and the technology shaping the future of healthcare.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+<style>
+:root{--primary:#1565c0;--secondary:#00897b;--bg:#f5f7fa;--surface:#ffffff;--text:#0d1b2a;--accent:#00bcd4;--muted:#7e57c2;--success:#2e7d32;--warning:#f9a825;--error:#c62828;}
+body.dark{--bg:#0d1b2a;--surface:#1b263b;--text:#e0e1dd;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:Inter,sans-serif;background:var(--bg);color:var(--text);transition:background .3s,color .3s;}
+nav{position:sticky;top:0;background:var(--surface);padding:1rem;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 8px rgba(0,0,0,.08);}
+.hero{padding:4rem 2rem;text-align:center;}
+.hero h1{font-size:3rem;margin-bottom:.5rem;}
+.btn{display:inline-block;padding:.75rem 1.5rem;margin:.5rem;border-radius:8px;background:var(--primary);color:#fff;text-decoration:none;}
+.section{padding:3rem 2rem;max-width:1100px;margin:0 auto;}
+.card{background:var(--surface);padding:1.5rem;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.06);margin-bottom:1rem;}
+input,textarea{width:100%;padding:.75rem;margin:.5rem 0;border:1px solid #ccc;border-radius:8px;}
+footer{text-align:center;padding:2rem;opacity:.7;}
+@media(max-width:600px){.hero h1{font-size:2rem;}}
+</style>
+</head>
+<body>
+<nav>
+ <strong>PharmaSphere</strong>
+ <div>
+  <a href="#about">About</a> |
+  <a href="#projects">Projects</a> |
+  <a href="#contact">Contact</a>
+  <button id="themeToggle">Theme</button>
+ </div>
+</nav>
+<section class="hero">
+ <h1>MYREE</h1>
+ <p>Aspiring Pharmacist | B.Pharm Student | Pharmaceutical Science & Technology</p>
+ <p>Exploring the science behind medicines and the technology shaping the future of healthcare.</p>
+ <a class="btn" href="#about">Explore My Portfolio</a>
+ <a class="btn" href="#science">Discover Pharmaceutical Science</a>
+</section>
+<section id="about" class="section">
+ <h2>About</h2>
+ <div class="card">
+  <p>Bachelor of Pharmacy student at Kerala University of Health Sciences (KUHS), Kerala, India. Second year, third semester. Interested in pharmaceutical sciences, drug development, healthcare innovation, and technology.</p>
+ </div>
+</section>
+<section id="science" class="section">
+ <h2>Pharmaceutical Knowledge</h2>
+ <div class="card"><h3>Pharmaceutics</h3><p>Dosage forms, solubility, dissolution, controlled-release concepts.</p></div>
+ <div class="card"><h3>Pharmacology</h3><p>Pharmacodynamics, pharmacokinetics, mechanisms of action.</p></div>
+ <div class="card"><h3>Pharmaceutical Analysis</h3><p>Titration, spectroscopy, chromatography, assay principles.</p></div>
+</section>
+<section id="projects" class="section">
+ <h2>Projects</h2>
+ <div class="card"><h3>Interactive ADME Visualizer</h3><p>Concept project: educational visualization of absorption, distribution, metabolism, excretion.</p></div>
+ <div class="card"><h3>Drug Dissolution Simulator</h3><p>Concept project: qualitative dissolution exploration (illustrative).</p></div>
+</section>
+<section id="contact" class="section">
+ <h2>Contact</h2>
+ <form id="contactForm">
+  <input type="text" placeholder="Name" required>
+  <input type="email" placeholder="Email" required>
+  <input type="text" placeholder="Subject">
+  <textarea placeholder="Message" required></textarea>
+  <button class="btn" type="submit">Send (demo)</button>
+ </form>
+ <p id="formMsg"></p>
+</section>
+<footer>© 2026 Myree — Student Portfolio</footer>
+<script>
+const PORTFOLIO_CONFIG={name:"Myree",title:"Aspiring Pharmacist",degree:"Bachelor of Pharmacy",university:"Kerala University of Health Sciences",academicStage:"Second year, third semester",location:"Kerala, India",email:"",phone:"",whatsapp:"",telegram:"",instagram:"",github:"",linkedin:"",cvUrl:"",bio:"",projects:[],skills:[],certificates:[],articles:[]};
+const stored=localStorage.getItem('theme'); if(stored==='dark') document.body.classList.add('dark');
+document.getElementById('themeToggle').addEventListener('click',()=>{document.body.classList.toggle('dark');localStorage.setItem('theme',document.body.classList.contains('dark')?'dark':'light');});
+document.getElementById('contactForm').addEventListener('submit',e=>{e.preventDefault();document.getElementById('formMsg').textContent='This is a local demo form. Configure an email service or use mailto for delivery.';});
+</script>
+</body>
+</html>
